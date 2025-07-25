@@ -236,6 +236,25 @@ class AIPredictor {
     }
 
     /**
+     * Set model từ bên ngoài (sau khi training)
+     */
+    public setModel(model: tf.LayersModel): void {
+        try {
+            // Dispose model cũ nếu có
+            if (this.model) {
+                this.model.dispose();
+            }
+            
+            this.model = model;
+            this.isModelLoaded = true;
+            Logger.info('✅ Model đã được set thành công');
+            
+        } catch (error) {
+            Logger.error('❌ Lỗi set model:', (error as Error).message);
+        }
+    }
+
+    /**
      * Dự đoán xu hướng giá dựa trên dữ liệu thị trường
      */
     async predict(marketData: MarketData): Promise<AIPrediction> {
@@ -278,21 +297,8 @@ class AIPredictor {
             // Tính toán các features từ dữ liệu thị trường
             const features = this.extractFeatures(marketData);
 
-            if (features.length < this.sequenceLength) {
-                // Nếu không đủ dữ liệu lịch sử, sử dụng mô hình đơn giản
-                return this.prepareSimpleInputData(marketData);
-            }
-
-            // Chuẩn hóa dữ liệu
-            const normalizedFeatures = this.normalizeData(features);
-
-            // Tạo sequence cho LSTM
-            const sequence = normalizedFeatures.slice(-this.sequenceLength);
-
-            // Chuyển đổi thành tensor
-            const inputTensor = tf.tensor3d([sequence]);
-
-            return inputTensor;
+            // Always use simple input data for dense model
+            return this.prepareSimpleInputData(marketData);
 
         } catch (error) {
             Logger.error('❌ Lỗi chuẩn bị dữ liệu:', (error as Error).message);

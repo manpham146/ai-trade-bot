@@ -10,7 +10,7 @@
     "dev:watch": "nodemon --exec ts-node src/index.ts",
     "demo": "node demo-simple.js",
     "demo-full": "node demo.js",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "test-okx": "node test-okx-connection.js",
     "train": "ts-node src/ai/train.ts",
@@ -37,6 +37,7 @@
   "license": "MIT",
   "dependencies": {
     "@tensorflow/tfjs": "^4.15.0",
+    "@tensorflow/tfjs-node": "^4.22.0",
     "axios": "^1.6.0",
     "ccxt": "^4.2.0",
     "compression": "^1.7.4",

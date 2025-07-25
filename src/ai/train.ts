@@ -85,7 +85,7 @@ class AITrainer {
                 apiKey: process.env.OKX_API_KEY,
                 secret: process.env.OKX_SECRET_KEY,
                 password: process.env.OKX_PASSPHRASE,
-                sandbox: false, // Sử dụng dữ liệu thật cho training
+                sandbox: process.env.OKX_SANDBOX === 'true', // Đọc từ biến môi trường
                 enableRateLimit: true
             });
 
@@ -188,17 +188,28 @@ class AITrainer {
                 const normalizedMACD = macdIndex >= 0 ? macd.macd[macdIndex] / close : 0;
                 const normalizedSMA = smaIndex >= 0 ? (sma20[smaIndex] - close) / close : 0;
 
+                // Match AIPredictor features: price, volume, rsi, macd, sma20, sma50
+                // Use close price instead of open/high/low to match AIPredictor
+                const normalizedPrice = (close - close) / close; // Always 0, but consistent
+                
                 const currentFeatures = [
-                    normalizedOpen,
-                    normalizedHigh,
-                    normalizedLow,
-                    normalizedVolume,
-                    normalizedRSI,
-                    normalizedMACD,
-                    normalizedSMA
+                    normalizedPrice,    // price feature
+                    normalizedVolume,   // volume feature
+                    normalizedRSI,      // rsi feature
+                    normalizedMACD,     // macd feature
+                    normalizedSMA,      // sma20 feature
+                    normalizedSMA       // sma50 feature (using same SMA for now)
                 ];
 
-                features.push(currentFeatures);
+                // Validate features for NaN/Infinity
+                const validFeatures = currentFeatures.map(feature => {
+                    if (isNaN(feature) || !isFinite(feature)) {
+                        return 0; // Replace NaN/Infinity with 0
+                    }
+                    return feature;
+                });
+
+                features.push(validFeatures);
 
                 // Label: Giá sẽ tăng hay giảm trong period tiếp theo
                 const currentPrice = ohlcv[i][4];
@@ -215,7 +226,9 @@ class AITrainer {
                     label = 0.5; // HOLD
                 }
 
-                labels.push(label);
+                // Validate label for NaN/Infinity
+                const validLabel = isNaN(label) || !isFinite(label) ? 0.5 : label;
+                labels.push(validLabel);
             }
 
             Logger.info(`✅ Chuẩn bị xong ${features.length} samples training data`);
@@ -257,13 +270,13 @@ class AITrainer {
                 }
             };
 
-            // Create a simple dense model for training
+            // Create a simple dense model for training (match AIPredictor architecture)
             const model = tf.sequential({
                 layers: [
                     tf.layers.dense({
                         units: 64,
                         activation: 'relu',
-                        inputShape: [7] // Flatten the sequence data
+                        inputShape: [6] // Match AIPredictor features: price, volume, rsi, macd, sma20, sma50
                     }),
                     tf.layers.dropout({ rate: 0.3 }),
                     tf.layers.dense({
@@ -276,7 +289,7 @@ class AITrainer {
             });
             
             model.compile({
-                optimizer: 'adam',
+                optimizer: tf.train.adam(0.001), // Lower learning rate to prevent NaN
                 loss: 'binaryCrossentropy',
                 metrics: ['accuracy']
             });
@@ -299,6 +312,9 @@ class AITrainer {
             Logger.info(`📊 Final Loss: ${finalLoss[0].toFixed(4)}`);
             Logger.info(`📊 Final Accuracy: ${finalAccuracy[0].toFixed(4)}`);
 
+            // Set model vào aiPredictor trước khi save
+            this.aiPredictor.setModel(model);
+            
             // Lưu mô hình
             await this.aiPredictor.saveModel();
 

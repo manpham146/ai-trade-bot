@@ -2,8 +2,12 @@ import * as ccxt from 'ccxt';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as dotenv from 'dotenv';
 import Logger from './Logger';
 import AIPredictor from '../ai/AIPredictor';
+
+// Load environment variables
+dotenv.config();
 
 /**
  * Health Check System
