@@ -271,3 +271,12 @@ MIT License - Xem [LICENSE](LICENSE) để biết chi tiết
 **🎉 Chúc mừng! Bạn đã có một AI Trading Bot hoàn chỉnh!**
 
 *Hãy nhớ: Trading có rủi ro. Luôn đầu tư có trách nhiệm và không bao giờ đầu tư quá khả năng tài chính của bạn.*
+## 📚 Documentation
+
+Xem [docs/README.md](docs/README.md) để có danh sách đầy đủ tài liệu.
+
+### 🚀 Quick Links:
+- [Quick Start](docs/setup/quick-start.md) - Bắt đầu nhanh
+- [OKX Setup](docs/setup/okx-setup.md) - Cấu hình sàn
+- [Bot Guide](docs/setup/bot-guide.md) - Hướng dẫn bot
+- [AI Training](docs/development/ai-training.md) - Huấn luyện AI
