@@ -7,20 +7,27 @@ module.exports = {
         jest: true
     },
     extends: [
-        'eslint:recommended'
+        'eslint:recommended',
+        '@typescript-eslint/recommended'
     ],
+    parser: '@typescript-eslint/parser',
     globals: {
         Atomics: 'readonly',
         SharedArrayBuffer: 'readonly'
     },
     parserOptions: {
         ecmaVersion: 2020,
-        sourceType: 'module'
+        sourceType: 'module',
+        project: './tsconfig.json'
     },
+    plugins: [
+        '@typescript-eslint'
+    ],
     rules: {
         // Possible Errors
         'no-console': 'off', // Cho phép console.log trong trading bot
-        'no-unused-vars': ['error', { 'argsIgnorePattern': '^_' }],
+        'no-unused-vars': 'off',
+        '@typescript-eslint/no-unused-vars': ['error', { 'argsIgnorePattern': '^_' }],
         'no-undef': 'error',
         
         // Best Practices
@@ -85,7 +92,12 @@ module.exports = {
         'prefer-spread': 'error',
         'prefer-template': 'error',
         'rest-spread-spacing': ['error', 'never'],
-        'template-curly-spacing': ['error', 'never']
+        'template-curly-spacing': ['error', 'never'],
+        
+        // TypeScript specific rules
+        '@typescript-eslint/explicit-function-return-type': 'warn',
+        '@typescript-eslint/no-explicit-any': 'warn',
+        '@typescript-eslint/no-inferrable-types': 'off'
     },
     overrides: [
         {

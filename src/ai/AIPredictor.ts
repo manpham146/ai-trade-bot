@@ -1,30 +1,64 @@
-const tf = require('@tensorflow/tfjs-node');
-const Logger = require('../utils/Logger');
-const fs = require('fs').promises;
-const path = require('path');
+import * as tf from '@tensorflow/tfjs-node';
+import Logger from '../utils/Logger';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 
 /**
  * AIPredictor - Mô hình AI dự đoán giá Bitcoin
  * Sử dụng LSTM Neural Network để phân tích dữ liệu lịch sử và dự đoán xu hướng
  */
 
+interface MarketData {
+    currentPrice: number;
+    volume?: number;
+    change24h?: number;
+    ohlcv?: number[][];
+    symbol?: string;
+    timestamp?: number;
+}
+
+interface AIPrediction {
+    signal: 'BUY' | 'SELL' | 'HOLD';
+    confidence: number;
+    rawPrediction: number;
+    timestamp: number;
+    note?: string;
+}
+
+interface ScalerParams {
+    min: Record<string, number>;
+    max: Record<string, number>;
+}
+
+interface ModelInfo {
+    status: string;
+    inputShape?: tf.Shape;
+    outputShape?: tf.Shape;
+    totalParams?: number;
+    layers?: number;
+    sequenceLength?: number;
+    features?: string[];
+}
+
 class AIPredictor {
+    private model: tf.LayersModel | null = null;
+    private isModelLoaded: boolean = false;
+    private sequenceLength: number = 60; // Sử dụng 60 điểm dữ liệu để dự đoán
+    private features: string[] = ['price', 'volume', 'rsi', 'macd', 'sma20', 'sma50'];
+    private scaler: ScalerParams = {
+        min: {},
+        max: {}
+    };
+    private modelPath: string;
+
     constructor() {
-        this.model = null;
-        this.isModelLoaded = false;
-        this.sequenceLength = 60; // Sử dụng 60 điểm dữ liệu để dự đoán
-        this.features = ['price', 'volume', 'rsi', 'macd', 'sma20', 'sma50'];
-        this.scaler = {
-            min: {},
-            max: {}
-        };
         this.modelPath = process.env.AI_MODEL_PATH || './models/btc_prediction_model';
     }
 
     /**
      * Khởi tạo AI Predictor
      */
-    async initialize() {
+    async initialize(): Promise<void> {
         try {
             Logger.info('🤖 Đang khởi tạo AI Predictor...');
 
@@ -44,7 +78,7 @@ class AIPredictor {
             this.isModelLoaded = true;
 
         } catch (error) {
-            Logger.error('❌ Lỗi khởi tạo AI Predictor:', error.message);
+            Logger.error('❌ Lỗi khởi tạo AI Predictor:', (error as Error).message);
             // Tạo mô hình đơn giản để bot vẫn có thể hoạt động
             await this.createSimpleModel();
         }
@@ -53,7 +87,7 @@ class AIPredictor {
     /**
      * Kiểm tra xem mô hình đã tồn tại chưa
      */
-    async checkModelExists() {
+    private async checkModelExists(): Promise<boolean> {
         try {
             await fs.access(path.join(this.modelPath, 'model.json'));
             return true;
@@ -65,7 +99,7 @@ class AIPredictor {
     /**
      * Tải mô hình đã huấn luyện
      */
-    async loadModel() {
+    private async loadModel(): Promise<void> {
         try {
             this.model = await tf.loadLayersModel(`file://${this.modelPath}/model.json`);
 
@@ -77,7 +111,7 @@ class AIPredictor {
             Logger.info('✅ Mô hình AI đã được tải thành công');
 
         } catch (error) {
-            Logger.error('❌ Lỗi tải mô hình:', error.message);
+            Logger.error('❌ Lỗi tải mô hình:', (error as Error).message);
             throw error;
         }
     }
@@ -85,7 +119,7 @@ class AIPredictor {
     /**
      * Tạo mô hình LSTM mới
      */
-    async createModel() {
+    private async createModel(): Promise<void> {
         try {
             const model = tf.sequential();
 
@@ -131,7 +165,7 @@ class AIPredictor {
             Logger.info(`📊 Tổng số parameters: ${model.countParams()}`);
 
         } catch (error) {
-            Logger.error('❌ Lỗi tạo mô hình:', error.message);
+            Logger.error('❌ Lỗi tạo mô hình:', (error as Error).message);
             throw error;
         }
     }
@@ -139,7 +173,7 @@ class AIPredictor {
     /**
      * Tạo mô hình đơn giản cho trường hợp khẩn cấp
      */
-    async createSimpleModel() {
+    private async createSimpleModel(): Promise<void> {
         try {
             const model = tf.sequential();
 
@@ -169,14 +203,14 @@ class AIPredictor {
             Logger.info('✅ Mô hình đơn giản đã được tạo');
 
         } catch (error) {
-            Logger.error('❌ Lỗi tạo mô hình đơn giản:', error.message);
+            Logger.error('❌ Lỗi tạo mô hình đơn giản:', (error as Error).message);
         }
     }
 
     /**
      * Dự đoán xu hướng giá dựa trên dữ liệu thị trường
      */
-    async predict(marketData) {
+    async predict(marketData: MarketData): Promise<AIPrediction> {
         try {
             if (!this.isModelLoaded || !this.model) {
                 return this.getDefaultPrediction();
@@ -190,18 +224,20 @@ class AIPredictor {
             }
 
             // Thực hiện dự đoán
-            const prediction = await this.model.predict(inputData).data();
+            const prediction = await this.model.predict(inputData) as tf.Tensor;
+            const predictionData = await prediction.data();
 
             // Xử lý kết quả dự đoán
-            const result = this.interpretPrediction(prediction[0], marketData);
+            const result = this.interpretPrediction(predictionData[0], marketData);
 
             // Cleanup tensor
             inputData.dispose();
+            prediction.dispose();
 
             return result;
 
         } catch (error) {
-            Logger.error('❌ Lỗi dự đoán AI:', error.message);
+            Logger.error('❌ Lỗi dự đoán AI:', (error as Error).message);
             return this.getDefaultPrediction();
         }
     }
@@ -209,7 +245,7 @@ class AIPredictor {
     /**
      * Chuẩn bị dữ liệu đầu vào cho mô hình
      */
-    prepareInputData(marketData) {
+    private prepareInputData(marketData: MarketData): tf.Tensor | null {
         try {
             // Tính toán các features từ dữ liệu thị trường
             const features = this.extractFeatures(marketData);
@@ -231,7 +267,7 @@ class AIPredictor {
             return inputTensor;
 
         } catch (error) {
-            Logger.error('❌ Lỗi chuẩn bị dữ liệu:', error.message);
+            Logger.error('❌ Lỗi chuẩn bị dữ liệu:', (error as Error).message);
             return null;
         }
     }
@@ -239,7 +275,7 @@ class AIPredictor {
     /**
      * Chuẩn bị dữ liệu đơn giản cho mô hình dự phòng
      */
-    prepareSimpleInputData(marketData) {
+    private prepareSimpleInputData(marketData: MarketData): tf.Tensor | null {
         try {
             const currentPrice = marketData.currentPrice;
             const volume = marketData.volume || 0;
@@ -254,8 +290,8 @@ class AIPredictor {
 
             if (closes.length >= 20) {
                 // Tính RSI đơn giản
-                const gains = [];
-                const losses = [];
+                const gains: number[] = [];
+                const losses: number[] = [];
                 for (let i = 1; i < Math.min(closes.length, 15); i++) {
                     const change = closes[i] - closes[i - 1];
                     gains.push(change > 0 ? change : 0);
@@ -285,7 +321,7 @@ class AIPredictor {
             return tf.tensor2d([features]);
 
         } catch (error) {
-            Logger.error('❌ Lỗi chuẩn bị dữ liệu đơn giản:', error.message);
+            Logger.error('❌ Lỗi chuẩn bị dữ liệu đơn giản:', (error as Error).message);
             return null;
         }
     }
@@ -293,9 +329,9 @@ class AIPredictor {
     /**
      * Trích xuất features từ dữ liệu thị trường
      */
-    extractFeatures(marketData) {
+    private extractFeatures(marketData: MarketData): number[][] {
         const ohlcv = marketData.ohlcv || [];
-        const features = [];
+        const features: number[][] = [];
 
         for (let i = 0; i < ohlcv.length; i++) {
             const [, , high, low, close, volume] = ohlcv[i];
@@ -320,8 +356,8 @@ class AIPredictor {
     /**
      * Chuẩn hóa dữ liệu
      */
-    normalizeData(data) {
-        const normalized = [];
+    private normalizeData(data: number[][]): number[][] {
+        const normalized: number[][] = [];
 
         for (let featureIndex = 0; featureIndex < this.features.length; featureIndex++) {
             const featureValues = data.map(row => row[featureIndex] || 0);
@@ -334,7 +370,7 @@ class AIPredictor {
         }
 
         for (let i = 0; i < data.length; i++) {
-            const normalizedRow = [];
+            const normalizedRow: number[] = [];
             for (let j = 0; j < this.features.length; j++) {
                 const value = data[i][j] || 0;
                 const min = this.scaler.min[this.features[j]];
@@ -351,31 +387,36 @@ class AIPredictor {
     /**
      * Giải thích kết quả dự đoán
      */
-    interpretPrediction(prediction, _marketData) {
-        let signal = 'HOLD';
+    private interpretPrediction(prediction: number, _marketData: MarketData): AIPrediction {
+        let signal: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
         let confidence = 0.5;
 
-        if (this.model.outputShape[1] === 1 && this.model.layers[this.model.layers.length - 1].activation.getClassName() === 'sigmoid') {
-            // Mô hình classification (sigmoid output)
-            confidence = Math.abs(prediction - 0.5) * 2;
-            signal = prediction > 0.6 ? 'BUY' : prediction < 0.4 ? 'SELL' : 'HOLD';
-        } else {
-            // Mô hình regression (linear output)
-            const predictedChange = prediction;
-
-            confidence = Math.min(Math.abs(predictedChange) * 10, 1);
-
-            if (predictedChange > 0.02) {
-                signal = 'BUY';
-            } else if (predictedChange < -0.02) {
-                signal = 'SELL';
+        if (this.model && this.model.outputShape[1] === 1) {
+            const lastLayer = this.model.layers[this.model.layers.length - 1];
+            const activation = (lastLayer as any).activation;
+            
+            if (activation && activation.getClassName && activation.getClassName() === 'sigmoid') {
+                // Mô hình classification (sigmoid output)
+                confidence = Math.abs(prediction - 0.5) * 2;
+                signal = prediction > 0.6 ? 'BUY' : prediction < 0.4 ? 'SELL' : 'HOLD';
             } else {
-                signal = 'HOLD';
+                // Mô hình regression (linear output)
+                const predictedChange = prediction;
+
+                confidence = Math.min(Math.abs(predictedChange) * 10, 1);
+
+                if (predictedChange > 0.02) {
+                    signal = 'BUY';
+                } else if (predictedChange < -0.02) {
+                    signal = 'SELL';
+                } else {
+                    signal = 'HOLD';
+                }
             }
         }
 
         // Áp dụng ngưỡng confidence
-        const minConfidence = parseFloat(process.env.PREDICTION_CONFIDENCE_THRESHOLD) || 0.7;
+        const minConfidence = parseFloat(process.env.PREDICTION_CONFIDENCE_THRESHOLD || '0.7');
         if (confidence < minConfidence) {
             signal = 'HOLD';
             confidence = 0.5;
@@ -392,7 +433,7 @@ class AIPredictor {
     /**
      * Trả về dự đoán mặc định khi có lỗi
      */
-    getDefaultPrediction() {
+    private getDefaultPrediction(): AIPrediction {
         return {
             signal: 'HOLD',
             confidence: 0.5,
@@ -405,7 +446,7 @@ class AIPredictor {
     /**
      * Lưu mô hình đã huấn luyện
      */
-    async saveModel() {
+    async saveModel(): Promise<void> {
         try {
             if (!this.model) {
                 throw new Error('Không có mô hình để lưu');
@@ -424,7 +465,7 @@ class AIPredictor {
             Logger.info('✅ Mô hình đã được lưu thành công');
 
         } catch (error) {
-            Logger.error('❌ Lỗi lưu mô hình:', error.message);
+            Logger.error('❌ Lỗi lưu mô hình:', (error as Error).message);
             throw error;
         }
     }
@@ -432,15 +473,13 @@ class AIPredictor {
     /**
      * Lấy thông tin mô hình
      */
-    getModelInfo() {
+    getModelInfo(): ModelInfo {
         if (!this.model) {
             return { status: 'Chưa khởi tạo' };
         }
 
         return {
             status: 'Đã sẵn sàng',
-            inputShape: this.model.inputShape,
-            outputShape: this.model.outputShape,
             totalParams: this.model.countParams(),
             layers: this.model.layers.length,
             sequenceLength: this.sequenceLength,
@@ -449,4 +488,4 @@ class AIPredictor {
     }
 }
 
-module.exports = AIPredictor;
+export default AIPredictor;

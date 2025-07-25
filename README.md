@@ -1,6 +1,6 @@
 # 🤖 AI Trading Bot - Bot Giao Dịch Tự Động với Trí Tuệ Nhân Tạo
 
-Bot giao dịch cryptocurrency tự động sử dụng AI (LSTM Neural Network) để dự đoán xu hướng giá Bitcoin và thực hiện giao dịch thông minh trên sàn OKX.
+Bot giao dịch cryptocurrency tự động sử dụng AI (LSTM Neural Network) để dự đoán xu hướng giá Bitcoin và thực hiện giao dịch thông minh trên sàn Binance với mục tiêu lợi nhuận ổn định 1%/tuần.
 
 ## ✨ Tính Năng Chính
 
@@ -35,51 +35,55 @@ cp .env.example .env
 
 Chỉnh sửa file `.env` với thông tin của bạn:
 ```env
-# API Configuration
-OKX_API_KEY=your_okx_api_key_here
-OKX_SECRET_KEY=your_okx_secret_key_here
-OKX_PASSPHRASE=your_okx_passphrase_here
-OKX_SANDBOX=true  # Đặt false khi ready để trade thật
+# API Keys cho sàn giao dịch
+EXCHANGE_API_KEY=your_binance_api_key_here
+EXCHANGE_SECRET=your_binance_secret_key_here
+EXCHANGE_SANDBOX=true  # Đặt false khi ready để trade thật
 
-# Trading Configuration
-TRADING_PAIR=BTC/USDT
-TRADE_AMOUNT=10
-MAX_TRADES_PER_DAY=5
-
-# Risk Management
+# Cấu hình giao dịch
+TRADING_SYMBOL=BTC/USDT
+TRADING_AMOUNT=10
+MAX_DAILY_TRADES=5
 STOP_LOSS_PERCENTAGE=2
 TAKE_PROFIT_PERCENTAGE=3
 
-# AI Configuration
+# Cấu hình AI
 PREDICTION_CONFIDENCE_THRESHOLD=0.7
+MODEL_UPDATE_INTERVAL=24
 
-# Bot Settings
-TRADING_ENABLED=false  # Đặt true khi sẵn sàng trade
+# Cấu hình rủi ro
+MAX_POSITION_SIZE=0.1
+RISK_PER_TRADE=0.01
+MAX_DRAWDOWN=0.05
+
+# Logging
 LOG_LEVEL=info
+LOG_TO_FILE=true
 ```
 
 ## 📚 Hướng Dẫn Sử Dụng
 
-### Bước 1: Lấy API Keys từ OKX
+### Bước 1: Lấy API Keys từ Binance
 
-1. Đăng nhập vào [OKX](https://www.okx.com)
+1. Đăng nhập vào [Binance](https://www.binance.com)
 2. Vào **Account** → **API Management**
 3. Tạo API Key mới với quyền:
    - ✅ Enable Reading
-   - ✅ Enable Trading
+   - ✅ Enable Spot & Margin Trading
    - ❌ Enable Withdrawals (KHÔNG bật để bảo mật)
-4. Lưu lại **API Key**, **Secret Key** và **Passphrase**
-4. Sao chép API Key và Secret Key vào file `.env`
+4. Lưu lại **API Key** và **Secret Key**
+5. Sao chép API Key và Secret Key vào file `.env`
+6. Đặt `EXCHANGE_SANDBOX=true` để test trước
 
 ### Bước 2: Huấn Luyện Mô Hình AI
 
 ```bash
 # Huấn luyện mô hình với dữ liệu lịch sử
-npm run train-ai
+npm run train
 ```
 
 Quá trình này sẽ:
-- Tải dữ liệu lịch sử 30 ngày từ OKX
+- Tải dữ liệu lịch sử 30 ngày từ Binance
 - Tính toán các chỉ báo kỹ thuật
 - Huấn luyện mô hình LSTM
 - Lưu mô hình đã train vào thư mục `models/`
@@ -88,14 +92,15 @@ Quá trình này sẽ:
 
 ```bash
 # Chạy bot ở chế độ test
-npm run dev
+npm start
 ```
 
 Bot sẽ:
-- Kết nối với OKX Sandbox
+- Kết nối với Binance (sandbox mode)
 - Phân tích thị trường mỗi 5 phút
-- Hiển thị tín hiệu mua/bán
-- KHÔNG thực hiện giao dịch thật
+- Hiển thị tín hiệu mua/bán từ AI
+- Quản lý rủi ro tự động
+- KHÔNG thực hiện giao dịch thật khi EXCHANGE_SANDBOX=true
 
 ### Bước 4: Web Dashboard
 

@@ -1,13 +1,22 @@
-require('dotenv').config();
-const TradingBot = require('./bot/TradingBot');
-const Logger = require('./utils/Logger');
+import 'dotenv/config';
+import TradingBot from './bot/TradingBot';
+import Logger from './utils/Logger';
 
 /**
  * AI Trading Bot - Entry Point
  * Bot giao dịch tự động với tích hợp AI cho cặp BTC/USDT
  */
 
-async function main() {
+interface BotConfig {
+    exchange: string;
+    symbol: string;
+    apiKey: string;
+    secret: string;
+    passphrase: string;
+    sandbox: boolean;
+}
+
+async function main(): Promise<void> {
     try {
         Logger.info('🚀 Khởi động AI Trading Bot...');
 
@@ -17,14 +26,16 @@ async function main() {
         }
 
         // Khởi tạo bot
-        const bot = new TradingBot({
+        const botConfig: BotConfig = {
             exchange: 'okx',
             symbol: process.env.TRADING_PAIR || 'BTC/USDT',
             apiKey: process.env.OKX_API_KEY,
             secret: process.env.OKX_SECRET_KEY,
             passphrase: process.env.OKX_PASSPHRASE,
             sandbox: process.env.OKX_SANDBOX === 'true'
-        });
+        };
+
+        const bot = new TradingBot(botConfig);
 
         // Khởi động bot
         await bot.start();
@@ -32,14 +43,15 @@ async function main() {
         Logger.info('✅ Bot đã khởi động thành công!');
 
         // Xử lý tín hiệu thoát
-        process.on('SIGINT', async() => {
+        process.on('SIGINT', async (): Promise<void> => {
             Logger.info('🛑 Đang dừng bot...');
             await bot.stop();
             process.exit(0);
         });
 
-    } catch (error) {
-        Logger.error('❌ Lỗi khởi động bot:', error.message);
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        Logger.error('❌ Lỗi khởi động bot:', errorMessage);
         process.exit(1);
     }
 }
@@ -49,4 +61,4 @@ if (require.main === module) {
     main();
 }
 
-module.exports = { main };
+export { main };

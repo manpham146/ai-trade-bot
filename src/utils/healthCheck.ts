@@ -1,37 +1,116 @@
-const ccxt = require('ccxt');
-const fs = require('fs').promises;
-const path = require('path');
-const Logger = require('./Logger');
-const AIPredictor = require('../ai/AIPredictor');
+import * as ccxt from 'ccxt';
+import { promises as fs } from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import Logger from './Logger';
+import AIPredictor from '../ai/AIPredictor';
 
 /**
  * Health Check System
  * Kiểm tra tình trạng sức khỏe của hệ thống trading bot
  */
-class HealthChecker {
-    constructor() {
-        this.checks = {
-            environment: false,
-            apiConnection: false,
-            aiModel: false,
-            diskSpace: false,
-            memory: false,
-            dependencies: false
-        };
 
-        this.results = {
-            overall: 'UNKNOWN',
-            timestamp: null,
-            details: {},
-            warnings: [],
-            errors: []
-        };
-    }
+interface HealthChecks {
+    environment: boolean;
+    apiConnection: boolean;
+    aiModel: boolean;
+    diskSpace: boolean;
+    memory: boolean;
+    dependencies: boolean;
+}
+
+interface EnvironmentDetails {
+    present: number;
+    missing: number;
+    missingVars: string[];
+}
+
+interface APIConnectionDetails {
+    status: 'connected' | 'failed';
+    responseTime?: number;
+    sandbox?: boolean;
+    balanceUSDT?: number;
+    balanceBTC?: number;
+    currentPrice?: number;
+    error?: string;
+}
+
+interface AIModelDetails {
+    modelPath: string;
+    modelFiles: number;
+    files: string[];
+}
+
+interface DiskSpaceDetails {
+    freeSpace: number;
+    freePercentage: number;
+    projectSize: number;
+}
+
+interface MemoryDetails {
+    heapUsed: number;
+    heapTotal: number;
+    systemFree: number;
+    systemTotal: number;
+    systemUsage: number;
+}
+
+interface DependenciesDetails {
+    total: number;
+    production: number;
+    development: number;
+    critical: number;
+    missingCritical: string[];
+}
+
+interface SummaryDetails {
+    totalChecks: number;
+    passedChecks: number;
+    passRate: number;
+    warningsCount: number;
+    errorsCount: number;
+}
+
+interface HealthDetails {
+    environment?: EnvironmentDetails;
+    apiConnection?: APIConnectionDetails;
+    aiModel?: AIModelDetails;
+    diskSpace?: DiskSpaceDetails;
+    memory?: MemoryDetails;
+    dependencies?: DependenciesDetails;
+    summary?: SummaryDetails;
+}
+
+interface HealthResults {
+    overall: 'HEALTHY' | 'FAIR' | 'WARNING' | 'CRITICAL' | 'UNKNOWN';
+    timestamp: string | null;
+    details: HealthDetails;
+    warnings: string[];
+    errors: string[];
+}
+
+class HealthChecker {
+    private checks: HealthChecks = {
+        environment: false,
+        apiConnection: false,
+        aiModel: false,
+        diskSpace: false,
+        memory: false,
+        dependencies: false
+    };
+
+    private results: HealthResults = {
+        overall: 'UNKNOWN',
+        timestamp: null,
+        details: {},
+        warnings: [],
+        errors: []
+    };
 
     /**
      * Chạy tất cả các kiểm tra
      */
-    async runAllChecks() {
+    async runAllChecks(): Promise<HealthResults> {
         Logger.info('🔍 Bắt đầu kiểm tra sức khỏe hệ thống...');
 
         try {
@@ -50,9 +129,9 @@ class HealthChecker {
             return this.results;
 
         } catch (error) {
-            Logger.error('❌ Lỗi kiểm tra sức khỏe:', error.message);
+            Logger.error('❌ Lỗi kiểm tra sức khỏe:', (error as Error).message);
             this.results.overall = 'CRITICAL';
-            this.results.errors.push(`System check failed: ${error.message}`);
+            this.results.errors.push(`System check failed: ${(error as Error).message}`);
             return this.results;
         }
     }
@@ -60,7 +139,7 @@ class HealthChecker {
     /**
      * Kiểm tra biến môi trường
      */
-    async checkEnvironment() {
+    private async checkEnvironment(): Promise<void> {
         try {
             const requiredEnvs = [
                 'OKX_API_KEY',
@@ -70,8 +149,8 @@ class HealthChecker {
                 'TRADE_AMOUNT'
             ];
 
-            const missing = [];
-            const present = [];
+            const missing: string[] = [];
+            const present: string[] = [];
 
             for (const env of requiredEnvs) {
                 if (process.env[env]) {
@@ -96,15 +175,15 @@ class HealthChecker {
             }
 
         } catch (error) {
-            this.results.errors.push(`Environment check failed: ${error.message}`);
-            Logger.error('❌ Lỗi kiểm tra môi trường:', error.message);
+            this.results.errors.push(`Environment check failed: ${(error as Error).message}`);
+            Logger.error('❌ Lỗi kiểm tra môi trường:', (error as Error).message);
         }
     }
 
     /**
      * Kiểm tra kết nối API
      */
-    async checkAPIConnection() {
+    private async checkAPIConnection(): Promise<void> {
         try {
             if (!process.env.OKX_API_KEY || !process.env.OKX_SECRET_KEY || !process.env.OKX_PASSPHRASE) {
                 this.results.errors.push('API credentials not configured');
@@ -143,12 +222,12 @@ class HealthChecker {
             }
 
         } catch (error) {
-            this.results.errors.push(`API connection failed: ${error.message}`);
-            Logger.error('❌ Lỗi kết nối API:', error.message);
+            this.results.errors.push(`API connection failed: ${(error as Error).message}`);
+            Logger.error('❌ Lỗi kết nối API:', (error as Error).message);
 
             this.results.details.apiConnection = {
                 status: 'failed',
-                error: error.message
+                error: (error as Error).message
             };
         }
     }
@@ -156,7 +235,7 @@ class HealthChecker {
     /**
      * Kiểm tra mô hình AI
      */
-    async checkAIModel() {
+    private async checkAIModel(): Promise<void> {
         try {
             const aiPredictor = new AIPredictor();
 
@@ -181,15 +260,15 @@ class HealthChecker {
             }
 
         } catch (error) {
-            this.results.errors.push(`AI model check failed: ${error.message}`);
-            Logger.error('❌ Lỗi kiểm tra mô hình AI:', error.message);
+            this.results.errors.push(`AI model check failed: ${(error as Error).message}`);
+            Logger.error('❌ Lỗi kiểm tra mô hình AI:', (error as Error).message);
         }
     }
 
     /**
      * Kiểm tra dung lượng đĩa
      */
-    async checkDiskSpace() {
+    private async checkDiskSpace(): Promise<void> {
         try {
             const { size } = await fs.stat(__filename);
 
@@ -214,19 +293,19 @@ class HealthChecker {
             }
 
         } catch (error) {
-            this.results.warnings.push(`Disk space check failed: ${error.message}`);
-            Logger.warn('⚠️ Không thể kiểm tra dung lượng đĩa:', error.message);
+            this.results.warnings.push(`Disk space check failed: ${(error as Error).message}`);
+            Logger.warn('⚠️ Không thể kiểm tra dung lượng đĩa:', (error as Error).message);
         }
     }
 
     /**
      * Kiểm tra bộ nhớ
      */
-    async checkMemory() {
+    private async checkMemory(): Promise<void> {
         try {
             const memUsage = process.memoryUsage();
-            const totalMem = require('os').totalmem();
-            const freeMem = require('os').freemem();
+            const totalMem = os.totalmem();
+            const freeMem = os.freemem();
 
             const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
             const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
@@ -251,15 +330,15 @@ class HealthChecker {
             }
 
         } catch (error) {
-            this.results.warnings.push(`Memory check failed: ${error.message}`);
-            Logger.warn('⚠️ Không thể kiểm tra bộ nhớ:', error.message);
+            this.results.warnings.push(`Memory check failed: ${(error as Error).message}`);
+            Logger.warn('⚠️ Không thể kiểm tra bộ nhớ:', (error as Error).message);
         }
     }
 
     /**
      * Kiểm tra dependencies
      */
-    async checkDependencies() {
+    private async checkDependencies(): Promise<void> {
         try {
             const packagePath = path.join(process.cwd(), 'package.json');
             const packageData = JSON.parse(await fs.readFile(packagePath, 'utf8'));
@@ -288,15 +367,15 @@ class HealthChecker {
             }
 
         } catch (error) {
-            this.results.errors.push(`Dependencies check failed: ${error.message}`);
-            Logger.error('❌ Lỗi kiểm tra dependencies:', error.message);
+            this.results.errors.push(`Dependencies check failed: ${(error as Error).message}`);
+            Logger.error('❌ Lỗi kiểm tra dependencies:', (error as Error).message);
         }
     }
 
     /**
      * Tính toán tình trạng tổng thể
      */
-    calculateOverallHealth() {
+    private calculateOverallHealth(): void {
         const totalChecks = Object.keys(this.checks).length;
         const passedChecks = Object.values(this.checks).filter(Boolean).length;
         const passRate = (passedChecks / totalChecks) * 100;
@@ -324,24 +403,24 @@ class HealthChecker {
     /**
      * Tạo báo cáo
      */
-    generateReport() {
+    private generateReport(): void {
         const { overall, details } = this.results;
-        const summary = details.summary;
+        const summary = details.summary!;
 
         console.log(`\n${'='.repeat(60)}`);
         console.log('🏥 BÁO CÁO SỨC KHỎE HỆ THỐNG');
         console.log('='.repeat(60));
 
         // Status icon
-        const statusIcon = {
+        const statusIcon: Record<string, string> = {
             'HEALTHY': '🟢',
             'FAIR': '🟡',
             'WARNING': '🟠',
             'CRITICAL': '🔴',
             'UNKNOWN': '⚪'
-        }[overall];
+        };
 
-        console.log(`${statusIcon} Tình trạng tổng thể: ${overall}`);
+        console.log(`${statusIcon[overall]} Tình trạng tổng thể: ${overall}`);
         console.log(`📊 Kiểm tra: ${summary.passedChecks}/${summary.totalChecks} thành công (${summary.passRate}%)`);
         console.log(`⚠️ Cảnh báo: ${summary.warningsCount}`);
         console.log(`❌ Lỗi: ${summary.errorsCount}`);
@@ -388,14 +467,14 @@ class HealthChecker {
     /**
      * Lưu báo cáo vào file
      */
-    async saveReport() {
+    async saveReport(): Promise<void> {
         try {
             const reportPath = path.join(__dirname, '../../data/health_report.json');
             await fs.mkdir(path.dirname(reportPath), { recursive: true });
             await fs.writeFile(reportPath, JSON.stringify(this.results, null, 2));
             Logger.info(`📄 Báo cáo sức khỏe đã được lưu: ${reportPath}`);
         } catch (error) {
-            Logger.error('❌ Lỗi lưu báo cáo:', error.message);
+            Logger.error('❌ Lỗi lưu báo cáo:', (error as Error).message);
         }
     }
 }
@@ -404,7 +483,7 @@ class HealthChecker {
 if (require.main === module) {
     const healthChecker = new HealthChecker();
     healthChecker.runAllChecks()
-        .then(async(results) => {
+        .then(async (results) => {
             await healthChecker.saveReport();
             process.exit(results.overall === 'CRITICAL' ? 1 : 0);
         })
@@ -414,4 +493,4 @@ if (require.main === module) {
         });
 }
 
-module.exports = HealthChecker;
+export default HealthChecker;

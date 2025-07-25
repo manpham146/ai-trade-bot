@@ -1,32 +1,83 @@
-require('dotenv').config();
-const tf = require('@tensorflow/tfjs-node');
-const ccxt = require('ccxt');
-const AIPredictor = require('./AIPredictor');
-const MarketAnalyzer = require('../bot/MarketAnalyzer');
-const Logger = require('../utils/Logger');
+import 'dotenv/config';
+import * as tf from '@tensorflow/tfjs-node';
+import * as ccxt from 'ccxt';
+import AIPredictor from './AIPredictor';
+import MarketAnalyzer from '../bot/MarketAnalyzer';
+import Logger from '../utils/Logger';
 
 /**
  * AI Training Script - Huấn luyện mô hình AI với dữ liệu lịch sử
  * Script này sẽ tải dữ liệu lịch sử từ OKX và huấn luyện mô hình LSTM
  */
 
+interface TrainingConfig {
+    symbol: string;
+    trainingDays: number;
+    sequenceLength: number;
+    batchSize: number;
+    epochs: number;
+    validationSplit: number;
+}
+
+interface MarketData {
+    symbol: string;
+    price: number;
+    currentPrice: number;
+    ohlcv: [number, number, number, number, number, number][];
+    volume: number;
+    timestamp: number;
+}
+
+interface TechnicalIndicators {
+    rsi: number[];
+    macd: {
+        macd: number[];
+        signal: number[];
+        histogram: number[];
+    };
+    sma20: number[];
+}
+
+interface TrainingData {
+    features: number[][][];
+    labels: number[];
+}
+
+interface TrainingResults {
+    loss: number;
+    accuracy: number;
+    history: any;
+}
+
+interface TestPrediction {
+    signal: 'BUY' | 'SELL' | 'HOLD';
+    confidence: number;
+    rawPrediction: number;
+}
+
 class AITrainer {
+    private exchange: ccxt.okx | null = null;
+    private aiPredictor: AIPredictor;
+    private marketAnalyzer: MarketAnalyzer;
+    private config: TrainingConfig;
+
     constructor() {
-        this.exchange = null;
         this.aiPredictor = new AIPredictor();
         this.marketAnalyzer = new MarketAnalyzer();
-        this.symbol = process.env.TRADING_PAIR || 'BTC/USDT';
-        this.trainingDays = parseInt(process.env.TRAINING_DATA_DAYS) || 30;
-        this.sequenceLength = 60;
-        this.batchSize = 32;
-        this.epochs = 50;
-        this.validationSplit = 0.2;
+        this.config = {
+            symbol: process.env.TRADING_PAIR || 'BTC/USDT',
+            trainingDays: parseInt(process.env.TRAINING_DATA_DAYS || '30'),
+            sequenceLength: 60,
+            batchSize: 32,
+            epochs: 50,
+            validationSplit: 0.2
+        };
     }
 
     /**
      * Khởi tạo kết nối exchange
      */
-    async initializeExchange() {
+    async initializeExchange(): Promise<void> {
         try {
             Logger.info('🔗 Đang kết nối với OKX để lấy dữ liệu...');
 
@@ -42,7 +93,7 @@ class AITrainer {
             Logger.info('✅ Kết nối OKX thành công!');
 
         } catch (error) {
-            Logger.error('❌ Lỗi kết nối OKX:', error.message);
+            Logger.error('❌ Lỗi kết nối OKX:', (error as Error).message);
             throw error;
         }
     }
@@ -50,20 +101,24 @@ class AITrainer {
     /**
      * Lấy dữ liệu lịch sử
      */
-    async fetchHistoricalData() {
+    async fetchHistoricalData(): Promise<number[][]> {
         try {
-            Logger.info(`📊 Đang tải dữ liệu lịch sử ${this.trainingDays} ngày cho ${this.symbol}...`);
+            if (!this.exchange) {
+                throw new Error('Exchange not initialized');
+            }
 
-            const since = Date.now() - (this.trainingDays * 24 * 60 * 60 * 1000);
+            Logger.info(`📊 Đang tải dữ liệu lịch sử ${this.config.trainingDays} ngày cho ${this.config.symbol}...`);
+
+            const since = Date.now() - (this.config.trainingDays * 24 * 60 * 60 * 1000);
             const timeframe = '5m'; // 5 phút
             const limit = 1000;
 
-            let allData = [];
+            let allData: number[][] = [];
             let currentSince = since;
 
             while (currentSince < Date.now()) {
                 const ohlcv = await this.exchange.fetchOHLCV(
-                    this.symbol,
+                    this.config.symbol,
                     timeframe,
                     currentSince,
                     limit
@@ -71,8 +126,9 @@ class AITrainer {
 
                 if (ohlcv.length === 0) { break; }
 
-                allData = allData.concat(ohlcv);
-                currentSince = ohlcv[ohlcv.length - 1][0] + 1;
+                allData = allData.concat(ohlcv as number[][]);
+                const lastCandle = ohlcv[ohlcv.length - 1];
+                currentSince = (lastCandle && lastCandle[0]) ? lastCandle[0] + 1 : Date.now();
 
                 Logger.info(`📈 Đã tải ${allData.length} điểm dữ liệu...`);
 
@@ -84,7 +140,7 @@ class AITrainer {
             return allData;
 
         } catch (error) {
-            Logger.error('❌ Lỗi tải dữ liệu lịch sử:', error.message);
+            Logger.error('❌ Lỗi tải dữ liệu lịch sử:', error as Error);
             throw error;
         }
     }
@@ -92,13 +148,12 @@ class AITrainer {
     /**
      * Chuẩn bị dữ liệu training
      */
-    async prepareTrainingData(ohlcv) {
+    async prepareTrainingData(ohlcv: number[][]): Promise<TrainingData> {
         try {
             Logger.info('🔧 Đang chuẩn bị dữ liệu training...');
 
             // Tính toán các chỉ báo kỹ thuật
             const closes = ohlcv.map(candle => candle[4]);
-            // Extract price data for calculations
 
             // Tính toán RSI
             const rsi = this.calculateRSI(closes, 14);
@@ -110,16 +165,16 @@ class AITrainer {
             const sma20 = this.calculateSMA(closes, 20);
 
             // Tạo features và labels
-            const features = [];
-            const labels = [];
+            const features: number[][][] = [];
+            const labels: number[] = [];
 
-            const startIndex = Math.max(this.sequenceLength, 60); // Đảm bảo có đủ dữ liệu cho indicators
+            const startIndex = Math.max(this.config.sequenceLength, 60); // Đảm bảo có đủ dữ liệu cho indicators
 
             for (let i = startIndex; i < ohlcv.length - 1; i++) {
                 // Features cho sequence
-                const sequence = [];
+                const sequence: number[][] = [];
 
-                for (let j = i - this.sequenceLength; j < i; j++) {
+                for (let j = i - this.config.sequenceLength; j < i; j++) {
                     const [, open, high, low, close, volume] = ohlcv[j];
 
                     // Chuẩn hóa giá theo close price hiện tại
@@ -156,7 +211,7 @@ class AITrainer {
                 const priceChange = (futurePrice - currentPrice) / currentPrice;
 
                 // Binary classification: 1 nếu tăng > 0.1%, 0 nếu giảm < -0.1%, 0.5 nếu sideways
-                let label;
+                let label: number;
                 if (priceChange > 0.001) {
                     label = 1; // BUY
                 } else if (priceChange < -0.001) {
@@ -173,7 +228,7 @@ class AITrainer {
             return { features, labels };
 
         } catch (error) {
-            Logger.error('❌ Lỗi chuẩn bị dữ liệu:', error.message);
+            Logger.error('❌ Lỗi chuẩn bị dữ liệu:', error as Error);
             throw error;
         }
     }
@@ -181,7 +236,7 @@ class AITrainer {
     /**
      * Huấn luyện mô hình
      */
-    async trainModel(features, labels) {
+    async trainModel(features: number[][][], labels: number[]): Promise<TrainingResults> {
         try {
             Logger.info('🤖 Bắt đầu huấn luyện mô hình AI...');
 
@@ -193,30 +248,53 @@ class AITrainer {
             Logger.info(`📊 Output shape: [${ys.shape.join(', ')}]`);
 
             // Tạo mô hình
-            await this.aiPredictor.createModel();
+            await this.aiPredictor.initialize();
 
             // Cấu hình callbacks
-            const callbacks = {
-                onEpochEnd: (epoch, logs) => {
-                    Logger.info(`Epoch ${epoch + 1}/${this.epochs} - Loss: ${logs.loss.toFixed(4)} - Val Loss: ${logs.val_loss.toFixed(4)}`);
+            const callbacks: tf.CustomCallbackArgs = {
+                onEpochEnd: (epoch: number, logs?: tf.Logs) => {
+                    if (logs) {
+                        Logger.info(`Epoch ${epoch + 1}/${this.config.epochs} - Loss: ${logs.loss.toFixed(4)} - Val Loss: ${logs.val_loss.toFixed(4)}`);
+                    }
                 },
                 onTrainEnd: () => {
                     Logger.info('✅ Hoàn thành huấn luyện!');
                 }
             };
 
+            // Create a simple model for training
+            const model = tf.sequential({
+                layers: [
+                    tf.layers.lstm({
+                        units: 50,
+                        returnSequences: true,
+                        inputShape: [this.config.sequenceLength, 7]
+                    }),
+                    tf.layers.dropout({ rate: 0.2 }),
+                    tf.layers.lstm({ units: 50, returnSequences: false }),
+                    tf.layers.dropout({ rate: 0.2 }),
+                    tf.layers.dense({ units: 1, activation: 'sigmoid' })
+                ]
+            });
+            
+            model.compile({
+                optimizer: 'adam',
+                loss: 'binaryCrossentropy',
+                metrics: ['accuracy']
+            });
+
             // Huấn luyện mô hình
-            const history = await this.aiPredictor.model.fit(xs, ys, {
-                epochs: this.epochs,
-                batchSize: this.batchSize,
-                validationSplit: this.validationSplit,
+            const history = await model.fit(xs, ys, {
+                epochs: this.config.epochs,
+                batchSize: this.config.batchSize,
+                validationSplit: this.config.validationSplit,
                 shuffle: true,
                 callbacks: callbacks,
                 verbose: 0
             });
 
             // Đánh giá mô hình
-            const evaluation = await this.aiPredictor.model.evaluate(xs, ys);
+            const evaluation = await model.evaluate(xs, ys) as tf.Scalar[];
             const finalLoss = await evaluation[0].data();
             const finalAccuracy = await evaluation[1].data();
 
@@ -237,7 +315,7 @@ class AITrainer {
             };
 
         } catch (error) {
-            Logger.error('❌ Lỗi huấn luyện mô hình:', error.message);
+            Logger.error('❌ Lỗi huấn luyện mô hình:', error as Error);
             throw error;
         }
     }
@@ -245,24 +323,29 @@ class AITrainer {
     /**
      * Test mô hình với dữ liệu mới
      */
-    async testModel() {
+    async testModel(): Promise<TestPrediction> {
         try {
+            if (!this.exchange) {
+                throw new Error('Exchange not initialized');
+            }
+
             Logger.info('🧪 Đang test mô hình...');
 
             // Lấy dữ liệu test (1 ngày gần nhất)
             const testData = await this.exchange.fetchOHLCV(
-                this.symbol,
+                this.config.symbol,
                 '5m',
                 Date.now() - (24 * 60 * 60 * 1000),
                 100
             );
 
             // Tạo mock market data
-            const marketData = {
-                symbol: this.symbol,
-                currentPrice: testData[testData.length - 1][4],
-                ohlcv: testData,
-                volume: testData[testData.length - 1][5],
+            const marketData: MarketData = {
+                symbol: this.config.symbol,
+                price: testData[testData.length - 1]![4] || 0,
+                currentPrice: testData[testData.length - 1]![4] || 0,
+                ohlcv: testData as [number, number, number, number, number, number][],
+                volume: testData[testData.length - 1]![5] || 0,
                 timestamp: Date.now()
             };
 
@@ -274,10 +357,10 @@ class AITrainer {
             Logger.info(`   Confidence: ${(prediction.confidence * 100).toFixed(1)}%`);
             Logger.info(`   Raw Prediction: ${prediction.rawPrediction}`);
 
-            return prediction;
+            return prediction as TestPrediction;
 
         } catch (error) {
-            Logger.error('❌ Lỗi test mô hình:', error.message);
+            Logger.error('❌ Lỗi test mô hình:', error as Error);
             throw error;
         }
     }
@@ -285,7 +368,7 @@ class AITrainer {
     /**
      * Chạy toàn bộ quá trình training
      */
-    async run() {
+    async run(): Promise<TrainingResults> {
         try {
             Logger.info('🚀 Bắt đầu quá trình huấn luyện AI Trading Bot...');
 
@@ -313,16 +396,16 @@ class AITrainer {
             return results;
 
         } catch (error) {
-            Logger.error('❌ Lỗi trong quá trình training:', error.message);
+            Logger.error('❌ Lỗi trong quá trình training:', error as Error);
             process.exit(1);
         }
     }
 
     // Helper methods cho indicators
-    calculateRSI(prices, period = 14) {
-        const rsi = [];
-        const gains = [];
-        const losses = [];
+    private calculateRSI(prices: number[], period: number = 14): number[] {
+        const rsi: number[] = [];
+        const gains: number[] = [];
+        const losses: number[] = [];
 
         for (let i = 1; i < prices.length; i++) {
             const change = prices[i] - prices[i - 1];
@@ -345,11 +428,11 @@ class AITrainer {
         return rsi;
     }
 
-    calculateMACD(prices) {
+    private calculateMACD(prices: number[]): { macd: number[]; signal: number[]; histogram: number[] } {
         const ema12 = this.calculateEMA(prices, 12);
         const ema26 = this.calculateEMA(prices, 26);
 
-        const macd = [];
+        const macd: number[] = [];
         const startIndex = Math.max(0, ema26.length - ema12.length);
 
         for (let i = startIndex; i < ema12.length; i++) {
@@ -357,7 +440,7 @@ class AITrainer {
         }
 
         const signal = this.calculateEMA(macd, 9);
-        const histogram = [];
+        const histogram: number[] = [];
 
         for (let i = 0; i < signal.length; i++) {
             histogram.push(macd[macd.length - signal.length + i] - signal[i]);
@@ -366,8 +449,8 @@ class AITrainer {
         return { macd, signal, histogram };
     }
 
-    calculateSMA(prices, period) {
-        const sma = [];
+    private calculateSMA(prices: number[], period: number): number[] {
+        const sma: number[] = [];
         for (let i = period - 1; i < prices.length; i++) {
             const sum = prices.slice(i - period + 1, i + 1).reduce((a, b) => a + b);
             sma.push(sum / period);
@@ -375,8 +458,8 @@ class AITrainer {
         return sma;
     }
 
-    calculateEMA(prices, period) {
-        const ema = [];
+    private calculateEMA(prices: number[], period: number): number[] {
+        const ema: number[] = [];
         const multiplier = 2 / (period + 1);
 
         let sum = 0;
@@ -401,9 +484,9 @@ if (require.main === module) {
         Logger.info('✅ Training hoàn thành!');
         process.exit(0);
     }).catch(error => {
-        Logger.error('❌ Training thất bại:', error.message);
+        Logger.error('❌ Training thất bại:', error as Error);
         process.exit(1);
     });
 }
 
-module.exports = AITrainer;
+export default AITrainer;

@@ -1,17 +1,153 @@
-const ccxt = require('ccxt');
-const AIPredictor = require('../ai/AIPredictor');
-const MarketAnalyzer = require('../bot/MarketAnalyzer');
-const RiskManager = require('../bot/RiskManager');
-const Logger = require('../utils/Logger');
-const fs = require('fs').promises;
-const path = require('path');
+import * as ccxt from 'ccxt';
+import AIPredictor from '../ai/AIPredictor';
+import MarketAnalyzer from '../bot/MarketAnalyzer';
+import RiskManager from '../bot/RiskManager';
+import Logger from '../utils/Logger';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 
 /**
  * Backtest Engine
  * Kiểm thử chiến lược trading trên dữ liệu lịch sử
  */
+
+interface BacktestConfig {
+    symbol: string;
+    timeframe: string;
+    startDate: Date;
+    endDate: Date;
+    initialBalance: number;
+    tradeAmount: number;
+    stopLoss: number;
+    takeProfit: number;
+    maxTradesPerDay: number;
+}
+
+interface Portfolio {
+    balance: number;
+    btc: number;
+    totalValue: number;
+    trades: Trade[];
+    dailyTrades: number;
+    lastTradeDate: Date | null;
+}
+
+interface Trade {
+    timestamp: number;
+    side: 'buy' | 'sell';
+    amount: number;
+    price: number;
+    cost: number;
+    fee: number;
+    pnl: number;
+}
+
+interface BacktestResults {
+    totalTrades: number;
+    winTrades: number;
+    lossTrades: number;
+    totalProfit: number;
+    maxDrawdown: number;
+    sharpeRatio: number;
+    winRate: number;
+    avgProfit: number;
+    avgLoss: number;
+    profitFactor: number;
+    roi: number;
+    dailyReturns: number[];
+}
+
+interface MarketData {
+    symbol: string;
+    price: number;
+    currentPrice: number;
+    high: number;
+    low: number;
+    volume: number;
+    timestamp: number;
+    ohlcv: number[][];
+    bid: number;
+    ask: number;
+}
+
+interface TechnicalAnalysis {
+    rsi: number;
+    macd: {
+        macd: number;
+        signal: number;
+        histogram: number;
+    };
+    sma20: number;
+    sma50: number;
+    ema12: number;
+    ema26: number;
+    bollinger: {
+        upper: number;
+        middle: number;
+        lower: number;
+    };
+    stochastic: {
+        k: number;
+        d: number;
+    };
+    trend: {
+        direction: 'UPTREND' | 'DOWNTREND' | 'SIDEWAYS';
+        strength: 'STRONG' | 'WEAK' | 'MODERATE';
+        support: number;
+        resistance: number;
+    };
+    volumeAnalysis: {
+        trend: 'INCREASING' | 'DECREASING' | 'STABLE';
+        strength: 'HIGH' | 'MEDIUM' | 'LOW';
+        avgVolume: number;
+        currentVolume: number;
+    };
+    signal: 'BUY' | 'SELL' | 'HOLD';
+    confidence: number;
+    reasoning: string[];
+}
+
+interface AIPrediction {
+    signal: 'BUY' | 'SELL' | 'HOLD';
+    confidence: number;
+    price: number;
+    timestamp: number;
+}
+
+interface RiskAssessment {
+    level: 'LOW' | 'MEDIUM' | 'HIGH';
+    score: number;
+    factors: string[];
+    recommendations: string[];
+    positionSizing: number;
+    stopLoss: number;
+    takeProfit: number;
+    error?: string;
+}
+
+interface TradingDecision {
+    action: 'BUY' | 'SELL' | 'HOLD';
+    amount?: number;
+    price?: number;
+    reason: string;
+}
+
+interface BacktestReport {
+    config: BacktestConfig;
+    results: BacktestResults;
+    portfolio: Portfolio;
+    timestamp: string;
+}
+
 class BacktestEngine {
-    constructor(config = {}) {
+    private config: BacktestConfig;
+    private marketAnalyzer: MarketAnalyzer;
+    private aiPredictor: AIPredictor;
+    private riskManager: RiskManager;
+    private portfolio: Portfolio;
+    private results: BacktestResults;
+
+    constructor(config: Partial<BacktestConfig> = {}) {
         this.config = {
             symbol: config.symbol || 'BTC/USDT',
             timeframe: config.timeframe || '5m',
@@ -23,7 +159,7 @@ class BacktestEngine {
             takeProfit: config.takeProfit || 0.03, // 3%
             maxTradesPerDay: config.maxTradesPerDay || 3,
             ...config
-        };
+        } as BacktestConfig;
 
         this.marketAnalyzer = new MarketAnalyzer();
         this.aiPredictor = new AIPredictor();
@@ -49,6 +185,7 @@ class BacktestEngine {
             avgProfit: 0,
             avgLoss: 0,
             profitFactor: 0,
+            roi: 0,
             dailyReturns: []
         };
     }
@@ -56,7 +193,7 @@ class BacktestEngine {
     /**
      * Chạy backtest
      */
-    async run() {
+    async run(): Promise<BacktestResults> {
         try {
             Logger.info('🔄 Bắt đầu backtest...');
             Logger.info(`📅 Từ ${this.config.startDate.toDateString()} đến ${this.config.endDate.toDateString()}`);
@@ -81,7 +218,7 @@ class BacktestEngine {
             return this.results;
 
         } catch (error) {
-            Logger.error('❌ Lỗi backtest:', error.message);
+            Logger.error('❌ Lỗi backtest:', (error as Error).message);
             throw error;
         }
     }
@@ -89,7 +226,7 @@ class BacktestEngine {
     /**
      * Lấy dữ liệu lịch sử từ OKX
      */
-    async getHistoricalData() {
+    private async getHistoricalData(): Promise<number[][]> {
         const exchange = new ccxt.okx({
             apiKey: process.env.OKX_API_KEY,
             secret: process.env.OKX_SECRET_KEY,
@@ -99,7 +236,7 @@ class BacktestEngine {
 
         const since = this.config.startDate.getTime();
         const limit = 1000;
-        let allData = [];
+        let allData: number[][] = [];
         let currentSince = since;
 
         while (currentSince < this.config.endDate.getTime()) {
@@ -110,10 +247,13 @@ class BacktestEngine {
                 limit
             );
 
-            if (data.length === 0) { break; }
+            if (!data || data.length === 0) { break; }
 
-            allData = allData.concat(data);
-            currentSince = data[data.length - 1][0] + 1;
+            allData = allData.concat(data as number[][]);
+            const lastCandle = data[data.length - 1];
+            if (lastCandle && lastCandle[0]) {
+                currentSince = lastCandle[0] + 1;
+            }
 
             // Tránh rate limit
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -128,7 +268,7 @@ class BacktestEngine {
     /**
      * Chạy simulation trên dữ liệu lịch sử
      */
-    async simulate(historicalData) {
+    private async simulate(historicalData: number[][]): Promise<void> {
         Logger.info('🎯 Bắt đầu simulation...');
 
         for (let i = 60; i < historicalData.length; i++) { // Bắt đầu từ nến thứ 60 để có đủ dữ liệu
@@ -150,22 +290,32 @@ class BacktestEngine {
 
             // Phân tích kỹ thuật
             const technicalAnalysis = await this.marketAnalyzer.analyze(marketData);
+            
+            // Bổ sung các thuộc tính còn thiếu cho technicalAnalysis
+             // TechnicalAnalysis từ MarketAnalyzer đã có đầy đủ cấu trúc cần thiết
+              const enhancedTechnicalAnalysis = technicalAnalysis;
 
             // Dự đoán AI (giả lập)
             const aiPrediction = await this.simulateAIPrediction(marketData);
 
             // Đánh giá rủi ro
-            const riskAssessment = await this.riskManager.assess({
+            const riskAssessmentData = {
                 marketData,
-                technicalAnalysis,
+                technicalAnalysis: enhancedTechnicalAnalysis,
                 aiPrediction,
-                currentPosition: this.portfolio.btc > 0 ? 'LONG' : null,
+                currentPosition: this.portfolio.btc > 0 ? {
+                     entryPrice: 0, // Simplified for backtest
+                     entryTime: Date.now(),
+                     amount: this.portfolio.btc,
+                     side: 'BUY' as const
+                 } : undefined,
                 dailyTrades: this.portfolio.dailyTrades
-            });
+            };
+            const riskAssessment = await this.riskManager.assess(riskAssessmentData);
 
             // Đưa ra quyết định giao dịch
             const decision = this.makeDecision({
-                technical: technicalAnalysis,
+                technical: enhancedTechnicalAnalysis,
                 ai: aiPrediction,
                 risk: riskAssessment,
                 currentPrice
@@ -187,12 +337,13 @@ class BacktestEngine {
     /**
      * Chuẩn bị dữ liệu thị trường từ OHLCV
      */
-    prepareMarketData(ohlcvData) {
+    private prepareMarketData(ohlcvData: number[][]): MarketData {
         const latest = ohlcvData[ohlcvData.length - 1];
 
         return {
             symbol: this.config.symbol,
             price: latest[4], // Close price
+            currentPrice: latest[4],
             high: latest[2],
             low: latest[3],
             volume: latest[5],
@@ -206,14 +357,14 @@ class BacktestEngine {
     /**
      * Giả lập dự đoán AI (vì không thể chạy AI thật trên dữ liệu lịch sử)
      */
-    async simulateAIPrediction(marketData) {
+    private async simulateAIPrediction(marketData: MarketData): Promise<AIPrediction> {
         // Sử dụng một số chỉ báo đơn giản để giả lập AI
         const prices = marketData.ohlcv.map(candle => candle[4]);
         const sma20 = this.calculateSMA(prices, 20);
         const sma50 = this.calculateSMA(prices, 50);
         const rsi = this.calculateRSI(prices, 14);
 
-        let signal = 'HOLD';
+        let signal: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
         let confidence = 0.5;
 
         // Logic đơn giản cho giả lập AI
@@ -236,7 +387,17 @@ class BacktestEngine {
     /**
      * Đưa ra quyết định giao dịch
      */
-    makeDecision({ technical, ai, risk, currentPrice }) {
+    private makeDecision({
+        technical,
+        ai,
+        risk,
+        currentPrice
+    }: {
+        technical: TechnicalAnalysis;
+        ai: AIPrediction;
+        risk: RiskAssessment;
+        currentPrice: number;
+    }): TradingDecision {
         // Kiểm tra giới hạn giao dịch hàng ngày
         if (this.portfolio.dailyTrades >= this.config.maxTradesPerDay) {
             return { action: 'HOLD', reason: 'Đã đạt giới hạn giao dịch hàng ngày' };
@@ -253,9 +414,17 @@ class BacktestEngine {
 
         let score = 0;
 
-        if (ai.signal === 'BUY') { score += aiWeight * ai.confidence; } else if (ai.signal === 'SELL') { score -= aiWeight * ai.confidence; }
+        if (ai.signal === 'BUY') {
+            score += aiWeight * ai.confidence;
+        } else if (ai.signal === 'SELL') {
+            score -= aiWeight * ai.confidence;
+        }
 
-        if (technical.signal === 'BUY') { score += technicalWeight * technical.strength; } else if (technical.signal === 'SELL') { score -= technicalWeight * technical.strength; }
+        if (technical.signal === 'BUY') {
+            score += technicalWeight * technical.confidence;
+        } else if (technical.signal === 'SELL') {
+            score -= technicalWeight * technical.confidence;
+        }
 
         // Quyết định dựa trên điểm số
         if (score > 0.5 && this.portfolio.btc === 0) {
@@ -280,10 +449,12 @@ class BacktestEngine {
     /**
      * Thực hiện giao dịch trong backtest
      */
-    async executeTrade(decision, timestamp, price) {
-        const trade = {
+    private async executeTrade(decision: TradingDecision, timestamp: Date, price: number): Promise<void> {
+        if (!decision.amount) return;
+
+        const trade: Trade = {
             timestamp: timestamp.getTime(),
-            side: decision.action.toLowerCase(),
+            side: decision.action.toLowerCase() as 'buy' | 'sell',
             amount: decision.amount,
             price: price,
             cost: decision.amount * price,
@@ -329,14 +500,14 @@ class BacktestEngine {
     /**
      * Cập nhật giá trị portfolio
      */
-    updatePortfolioValue(currentPrice) {
+    private updatePortfolioValue(currentPrice: number): void {
         this.portfolio.totalValue = this.portfolio.balance + (this.portfolio.btc * currentPrice);
     }
 
     /**
      * Tính toán kết quả backtest
      */
-    calculateResults() {
+    private calculateResults(): void {
         const finalValue = this.portfolio.totalValue;
         const initialValue = this.config.initialBalance;
 
@@ -363,8 +534,8 @@ class BacktestEngine {
     /**
      * Tạo báo cáo backtest
      */
-    async generateReport() {
-        const report = {
+    private async generateReport(): Promise<void> {
+        const report: BacktestReport = {
             config: this.config,
             results: this.results,
             portfolio: this.portfolio,
@@ -397,13 +568,13 @@ class BacktestEngine {
     }
 
     // Helper functions
-    calculateSMA(prices, period) {
+    private calculateSMA(prices: number[], period: number): number {
         if (prices.length < period) { return prices[prices.length - 1]; }
         const sum = prices.slice(-period).reduce((a, b) => a + b, 0);
         return sum / period;
     }
 
-    calculateRSI(prices, period = 14) {
+    private calculateRSI(prices: number[], period: number = 14): number {
         if (prices.length < period + 1) { return 50; }
 
         let gains = 0;
@@ -411,7 +582,11 @@ class BacktestEngine {
 
         for (let i = prices.length - period; i < prices.length; i++) {
             const change = prices[i] - prices[i - 1];
-            if (change > 0) { gains += change; } else { losses -= change; }
+            if (change > 0) {
+                gains += change;
+            } else {
+                losses -= change;
+            }
         }
 
         const avgGain = gains / period;
@@ -426,7 +601,7 @@ class BacktestEngine {
 
 // Chạy backtest nếu file được gọi trực tiếp
 if (require.main === module) {
-    const config = {
+    const config: Partial<BacktestConfig> = {
         symbol: process.env.TRADING_PAIR || 'BTC/USDT',
         timeframe: '5m',
         startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 ngày trước
@@ -442,4 +617,4 @@ if (require.main === module) {
     backtest.run().catch(console.error);
 }
 
-module.exports = BacktestEngine;
+export default BacktestEngine;

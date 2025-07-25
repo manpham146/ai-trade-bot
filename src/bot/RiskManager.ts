@@ -1,28 +1,120 @@
-const Logger = require('../utils/Logger');
+import Logger from '../utils/Logger';
 
 /**
  * RiskManager - Quản lý rủi ro giao dịch
  * Đánh giá và kiểm soát rủi ro để bảo vệ vốn đầu tư
  */
 
-class RiskManager {
-    constructor() {
-        this.maxPositionSize = parseFloat(process.env.MAX_POSITION_SIZE) || 100;
-        this.stopLossPercentage = parseFloat(process.env.STOP_LOSS_PERCENTAGE) || 2;
-        this.takeProfitPercentage = parseFloat(process.env.TAKE_PROFIT_PERCENTAGE) || 3;
-        this.maxTradesPerDay = parseInt(process.env.MAX_TRADES_PER_DAY) || 5;
-        this.dailyTradeCount = 0;
-        this.lastTradeDate = null;
+interface MarketData {
+    currentPrice: number;
+    ohlcv?: number[][];
+    volume?: number;
+    symbol?: string;
+    timestamp?: number;
+}
 
-        // Lịch sử giao dịch để phân tích
-        this.tradeHistory = [];
-        this.maxHistoryLength = 100;
+interface TechnicalAnalysis {
+    indicators?: {
+        rsi?: number;
+        macd?: {
+            histogram: number;
+        };
+        bollinger?: {
+            upper: number;
+            lower: number;
+            middle: number;
+        };
+    };
+    trend?: {
+        direction: 'UPTREND' | 'DOWNTREND' | 'SIDEWAYS';
+    };
+    currentPrice?: number;
+}
+
+interface AIPrediction {
+    confidence: number;
+    signal: 'BUY' | 'SELL' | 'HOLD';
+    timestamp?: number;
+}
+
+interface Position {
+    entryPrice: number;
+    entryTime: number;
+    stopLoss?: number;
+    takeProfit?: number;
+    amount: number;
+    side: 'BUY' | 'SELL';
+}
+
+interface Trade {
+    id?: string;
+    symbol: string;
+    side: 'BUY' | 'SELL';
+    amount: number;
+    price: number;
+    timestamp?: number;
+    profit?: number;
+}
+
+interface RiskFactor {
+    score: number;
+    reason: string;
+    [key: string]: any;
+}
+
+interface RiskAssessmentData {
+    marketData: MarketData;
+    technicalAnalysis: TechnicalAnalysis;
+    aiPrediction: AIPrediction;
+    currentPosition?: Position;
+}
+
+interface RiskBreakdown {
+    volatility: RiskFactor;
+    technical: RiskFactor;
+    aiConfidence: RiskFactor;
+    position: RiskFactor;
+    frequency: RiskFactor;
+}
+
+interface OverallRisk {
+    score: number;
+    factors: string[];
+    breakdown: RiskBreakdown;
+}
+
+interface RiskAssessment {
+    level: 'LOW' | 'MEDIUM' | 'HIGH';
+    score: number;
+    factors: string[];
+    recommendations: string[];
+    positionSizing: number;
+    stopLoss: number;
+    takeProfit: number;
+    error?: string;
+}
+
+class RiskManager {
+    private maxPositionSize: number;
+    private stopLossPercentage: number;
+    private takeProfitPercentage: number;
+    private maxTradesPerDay: number;
+    private dailyTradeCount: number = 0;
+    private lastTradeDate: string | null = null;
+    private tradeHistory: (Trade & { timestamp: number })[] = [];
+    private maxHistoryLength: number = 100;
+
+    constructor() {
+        this.maxPositionSize = parseFloat(process.env.MAX_POSITION_SIZE || '100');
+        this.stopLossPercentage = parseFloat(process.env.STOP_LOSS_PERCENTAGE || '2');
+        this.takeProfitPercentage = parseFloat(process.env.TAKE_PROFIT_PERCENTAGE || '3');
+        this.maxTradesPerDay = parseInt(process.env.MAX_TRADES_PER_DAY || '5');
     }
 
     /**
      * Đánh giá rủi ro tổng thể
      */
-    async assess(data) {
+    async assess(data: RiskAssessmentData): Promise<RiskAssessment> {
         try {
             const { marketData, technicalAnalysis, aiPrediction, currentPosition } = data;
 
@@ -53,11 +145,16 @@ class RiskManager {
             };
 
         } catch (error) {
-            Logger.error('❌ Lỗi đánh giá rủi ro:', error.message);
+            Logger.error('❌ Lỗi đánh giá rủi ro:', (error as Error).message);
             return {
                 level: 'HIGH',
                 score: 0.8,
-                error: error.message
+                factors: [],
+                recommendations: [],
+                positionSizing: 0,
+                stopLoss: 0,
+                takeProfit: 0,
+                error: (error as Error).message
             };
         }
     }
@@ -65,7 +162,7 @@ class RiskManager {
     /**
      * Đánh giá rủi ro từ độ biến động
      */
-    assessVolatilityRisk(marketData) {
+    private assessVolatilityRisk(marketData: MarketData): RiskFactor {
         try {
             const ohlcv = marketData.ohlcv || [];
             if (ohlcv.length < 20) {
@@ -125,7 +222,7 @@ class RiskManager {
             };
 
         } catch (error) {
-            Logger.error('❌ Lỗi đánh giá volatility risk:', error.message);
+            Logger.error('❌ Lỗi đánh giá volatility risk:', (error as Error).message);
             return { score: 0.5, reason: 'Lỗi tính toán volatility' };
         }
     }
@@ -133,14 +230,14 @@ class RiskManager {
     /**
      * Đánh giá rủi ro từ phân tích kỹ thuật
      */
-    assessTechnicalRisk(technicalAnalysis) {
+    private assessTechnicalRisk(technicalAnalysis: TechnicalAnalysis): RiskFactor {
         try {
             if (!technicalAnalysis || !technicalAnalysis.indicators) {
                 return { score: 0.5, reason: 'Không có dữ liệu kỹ thuật' };
             }
 
             const indicators = technicalAnalysis.indicators;
-            const riskFactors = [];
+            const riskFactors: string[] = [];
             let riskScore = 0;
 
             // Đánh giá RSI
@@ -195,7 +292,7 @@ class RiskManager {
             };
 
         } catch (error) {
-            Logger.error('❌ Lỗi đánh giá technical risk:', error.message);
+            Logger.error('❌ Lỗi đánh giá technical risk:', (error as Error).message);
             return { score: 0.5, reason: 'Lỗi phân tích kỹ thuật' };
         }
     }
@@ -203,7 +300,7 @@ class RiskManager {
     /**
      * Đánh giá rủi ro từ độ tin cậy AI
      */
-    assessAIConfidenceRisk(aiPrediction) {
+    private assessAIConfidenceRisk(aiPrediction: AIPrediction): RiskFactor {
         try {
             if (!aiPrediction || typeof aiPrediction.confidence !== 'number') {
                 return { score: 0.7, reason: 'Không có dự đoán AI' };
@@ -238,7 +335,7 @@ class RiskManager {
             };
 
         } catch (error) {
-            Logger.error('❌ Lỗi đánh giá AI confidence risk:', error.message);
+            Logger.error('❌ Lỗi đánh giá AI confidence risk:', (error as Error).message);
             return { score: 0.7, reason: 'Lỗi đánh giá AI' };
         }
     }
@@ -246,7 +343,7 @@ class RiskManager {
     /**
      * Đánh giá rủi ro vị thế hiện tại
      */
-    assessPositionRisk(currentPosition, marketData) {
+    private assessPositionRisk(currentPosition: Position | undefined, marketData: MarketData): RiskFactor {
         try {
             if (!currentPosition) {
                 return { score: 0, reason: 'Không có vị thế mở' };
@@ -296,7 +393,7 @@ class RiskManager {
             };
 
         } catch (error) {
-            Logger.error('❌ Lỗi đánh giá position risk:', error.message);
+            Logger.error('❌ Lỗi đánh giá position risk:', (error as Error).message);
             return { score: 0.5, reason: 'Lỗi đánh giá vị thế' };
         }
     }
@@ -304,7 +401,7 @@ class RiskManager {
     /**
      * Đánh giá rủi ro tần suất giao dịch
      */
-    assessTradingFrequencyRisk() {
+    private assessTradingFrequencyRisk(): RiskFactor {
         try {
             const today = new Date().toDateString();
 
@@ -339,7 +436,7 @@ class RiskManager {
             };
 
         } catch (error) {
-            Logger.error('❌ Lỗi đánh giá frequency risk:', error.message);
+            Logger.error('❌ Lỗi đánh giá frequency risk:', (error as Error).message);
             return { score: 0.3, reason: 'Lỗi đánh giá tần suất' };
         }
     }
@@ -347,7 +444,7 @@ class RiskManager {
     /**
      * Tính toán điểm rủi ro tổng thể
      */
-    calculateOverallRisk(risks) {
+    private calculateOverallRisk(risks: RiskBreakdown): OverallRisk {
         const weights = {
             volatility: 0.25,
             technical: 0.2,
@@ -357,11 +454,11 @@ class RiskManager {
         };
 
         let totalScore = 0;
-        const factors = [];
+        const factors: string[] = [];
 
         for (const [type, risk] of Object.entries(risks)) {
             if (risk && typeof risk.score === 'number') {
-                totalScore += risk.score * weights[type];
+                totalScore += risk.score * weights[type as keyof typeof weights];
                 if (risk.reason) {
                     factors.push(`${type}: ${risk.reason}`);
                 }
@@ -378,7 +475,7 @@ class RiskManager {
     /**
      * Xác định mức độ rủi ro
      */
-    getRiskLevel(score) {
+    private getRiskLevel(score: number): 'LOW' | 'MEDIUM' | 'HIGH' {
         if (score >= 0.7) { return 'HIGH'; }
         if (score >= 0.4) { return 'MEDIUM'; }
         return 'LOW';
@@ -387,8 +484,8 @@ class RiskManager {
     /**
      * Đưa ra khuyến nghị dựa trên đánh giá rủi ro
      */
-    getRecommendations(riskAssessment) {
-        const recommendations = [];
+    private getRecommendations(riskAssessment: OverallRisk): string[] {
+        const recommendations: string[] = [];
         const score = riskAssessment.score;
 
         if (score >= 0.7) {
@@ -411,8 +508,8 @@ class RiskManager {
     /**
      * Tính toán kích thước vị thế dựa trên rủi ro
      */
-    calculatePositionSize(riskScore, _marketData) {
-        const baseAmount = parseFloat(process.env.TRADE_AMOUNT) || 10;
+    private calculatePositionSize(riskScore: number, _marketData: MarketData): number {
+        const baseAmount = parseFloat(process.env.TRADE_AMOUNT || '10');
         let multiplier = 1;
 
         if (riskScore >= 0.7) {
@@ -432,7 +529,7 @@ class RiskManager {
     /**
      * Tính toán stop loss động
      */
-    calculateDynamicStopLoss(riskScore, _marketData) {
+    private calculateDynamicStopLoss(riskScore: number, _marketData: MarketData): number {
         let stopLossPercentage = this.stopLossPercentage;
 
         // Điều chỉnh stop loss dựa trên rủi ro
@@ -450,7 +547,7 @@ class RiskManager {
     /**
      * Tính toán take profit động
      */
-    calculateDynamicTakeProfit(riskScore, _marketData) {
+    private calculateDynamicTakeProfit(riskScore: number, _marketData: MarketData): number {
         let takeProfitPercentage = this.takeProfitPercentage;
 
         // Điều chỉnh take profit dựa trên rủi ro
@@ -466,7 +563,7 @@ class RiskManager {
     /**
      * Ghi nhận giao dịch mới
      */
-    recordTrade(trade) {
+    recordTrade(trade: Trade): void {
         this.dailyTradeCount++;
         this.tradeHistory.push({
             ...trade,
@@ -482,7 +579,12 @@ class RiskManager {
     /**
      * Lấy thống kê rủi ro
      */
-    getRiskStats() {
+    getRiskStats(): {
+        dailyTradeCount: number;
+        maxTradesPerDay: number;
+        tradeHistoryLength: number;
+        lastTradeDate: string | null;
+    } {
         return {
             dailyTradeCount: this.dailyTradeCount,
             maxTradesPerDay: this.maxTradesPerDay,
@@ -492,4 +594,4 @@ class RiskManager {
     }
 }
 
-module.exports = RiskManager;
+export default RiskManager;
