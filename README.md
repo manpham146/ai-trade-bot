@@ -1,10 +1,196 @@
-# 🤖 AI Trading Bot - Phiên Bản Hoàn Chỉnh
+# 🤖 AI Trading Bot
 
-> **Bot giao dịch tự động tích hợp AI với mục tiêu 1%/tuần lợi nhuận ổn định**
+> AI-powered cryptocurrency trading bot với quản lý rủi ro thông minh và mục tiêu lợi nhuận 1%/tuần
 
-## 🎯 Tổng Quan Dự Án
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
+[![TensorFlow.js](https://img.shields.io/badge/TensorFlow.js-4.0+-orange.svg)](https://www.tensorflow.org/js)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Đây là một bot trading cryptocurrency hoàn chỉnh được xây dựng bằng TypeScript/Node.js, tích hợp trí tuệ nhân tạo để đưa ra quyết định giao dịch thông minh. Bot được thiết kế với triết lý "An Toàn Vốn là Ưu Tiên Số Một" và nhắm đến mục tiêu lợi nhuận ổn định 1%/tuần.
+## ✨ Tính Năng Chính
+
+- 🧠 **AI Prediction**: Sử dụng TensorFlow.js để dự đoán xu hướng giá
+- 📊 **Technical Analysis**: RSI, MACD, SMA indicators với độ chính xác cao
+- 🛡️ **Risk Management**: Stop-loss, Take-profit tự động với tỷ lệ Risk/Reward tối ưu
+- 📈 **Backtesting**: Kiểm thử chiến lược trên dữ liệu lịch sử
+- 🔒 **Security**: Bảo mật API keys và thông tin nhạy cảm
+- 🎯 **Target**: Mục tiêu lợi nhuận ổn định 1%/tuần với ưu tiên bảo toàn vốn
+- 🤖 **Automation**: Giao dịch tự động 24/7 với giám sát thông minh
+
+## 🚀 Quick Start
+
+### 1. Cài Đặt
+
+```bash
+# Clone repository
+git clone https://github.com/YOUR_USERNAME/ai-trading-bot.git
+cd ai-trading-bot
+
+# Install dependencies
+npm install
+
+# Setup environment
+cp .env.example .env
+# Cập nhật API keys trong .env
+```
+
+### 2. Cấu Hình
+
+```bash
+# Chạy setup wizard
+npm run setup
+
+# Hoặc cấu hình thủ công
+# Edit .env với OKX API credentials
+```
+
+### 3. Training AI Model
+
+```bash
+# Train model với dữ liệu BTC/USDT
+npm run train
+
+# Kiểm tra model đã train
+npm run health-check
+```
+
+### 4. Chạy Bot
+
+```bash
+# Demo mode (không giao dịch thật)
+npm run demo
+
+# Paper trading (tài khoản ảo)
+npm run paper
+
+# Live trading (cẩn thận!)
+npm run start
+```
+
+## 📚 Documentation
+
+### 📖 Setup Guides
+- [⚡ Quick Start Guide](docs/setup/quick-start.md) - Bắt đầu nhanh trong 5 phút
+- [🔧 OKX Setup](docs/setup/okx-setup.md) - Cấu hình OKX API
+- [🔒 Security Guide](docs/setup/security.md) - Bảo mật và best practices
+- [🤖 Bot Configuration](docs/setup/bot-guide.md) - Cấu hình bot chi tiết
+- [🐙 GitHub Setup](docs/setup/github-setup.md) - Tạo repository GitHub
+
+### 🛠️ Development
+- [🧠 AI Training Guide](docs/development/ai-training.md) - Huấn luyện mô hình AI
+- [📈 Health Check](docs/development/health-check.md) - Kiểm tra hệ thống
+- [🔄 Upgrade Guide](docs/development/upgrade-guide.md) - Nâng cấp và bảo trì
+
+### 📊 Reports & Status
+- [✅ Scripts Status](docs/reports/scripts-status.md) - Trạng thái các scripts
+- [🔍 Script Check](docs/reports/script-check.md) - Kiểm tra tính năng
+- [📦 Sandbox Update](docs/reports/sandbox-update.md) - Cập nhật môi trường
+
+## 🏗️ Kiến Trúc Hệ Thống
+
+```
+ai-trading-bot/
+├── src/
+│   ├── ai/              # AI Models & Training
+│   ├── bot/             # Trading Logic
+│   ├── utils/           # Utilities
+│   └── web/             # Web Interface
+├── docs/                # Documentation
+├── models/              # Trained AI Models
+└── scripts/             # Automation Scripts
+```
+
+## 🎯 Chiến Lược Giao Dịch
+
+### Mục Tiêu: 1%/tuần với An Toàn Vốn Ưu Tiên
+
+- **Risk Management**: Không quá 1% vốn cho mỗi lệnh
+- **Target Pair**: BTC/USDT (ổn định, thanh khoản cao)
+- **Timeframe**: 4H, 1D (giảm noise, tăng độ tin cậy)
+- **AI Confirmation**: Sử dụng AI như bộ lọc xác nhận tín hiệu
+- **Stop Loss**: Tự động với tỷ lệ Risk/Reward 1:2
+
+### Technical Indicators
+
+- **RSI (14)**: Xác định vùng quá mua/quá bán
+- **MACD (12,26,9)**: Tín hiệu xu hướng và momentum
+- **SMA (20,50)**: Xác định xu hướng dài hạn
+- **AI Prediction**: Dự đoán hướng giá trong 24-48h
+
+## 🔧 Scripts Có Sẵn
+
+```bash
+npm run setup          # Setup wizard
+npm run train          # Train AI model
+npm run demo           # Demo trading
+npm run backtest       # Historical testing
+npm run health-check   # System health
+npm run web            # Web interface
+```
+
+## 🔐 Bảo Mật
+
+### ⚠️ QUAN TRỌNG
+
+- **Không bao giờ** commit API keys vào Git
+- Sử dụng `.env` file cho sensitive data
+- Enable IP whitelist trên OKX
+- Sử dụng API keys với quyền hạn tối thiểu
+- Thường xuyên rotate API keys
+
+### Environment Variables
+
+```bash
+# OKX API Configuration
+OKX_API_KEY=your_api_key
+OKX_SECRET_KEY=your_secret_key
+OKX_PASSPHRASE=your_passphrase
+OKX_SANDBOX=true  # false for live trading
+
+# Bot Configuration
+TRADING_PAIR=BTC-USDT
+RISK_PERCENTAGE=1
+TARGET_PROFIT=1
+```
+
+## 📊 Performance Metrics
+
+- **Target Return**: 1% per week (52% annually)
+- **Max Drawdown**: < 5%
+- **Win Rate**: Target 60%+
+- **Risk/Reward**: Minimum 1:2
+- **Sharpe Ratio**: Target > 1.5
+
+## 🤝 Contributing
+
+1. Fork repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open Pull Request
+
+## 📄 License
+
+MIT License - xem [LICENSE](LICENSE) file để biết chi tiết.
+
+## ⚠️ Disclaimer
+
+**QUAN TRỌNG**: Bot này được phát triển cho mục đích giáo dục và nghiên cứu. Giao dịch cryptocurrency có rủi ro cao và có thể dẫn đến mất mát toàn bộ vốn đầu tư. 
+
+- Luôn test trên paper trading trước
+- Chỉ đầu tư số tiền bạn có thể chấp nhận mất
+- Hiểu rõ rủi ro trước khi sử dụng
+- Tác giả không chịu trách nhiệm về tổn thất
+
+## 📞 Support
+
+- 📖 [Documentation](docs/README.md)
+- 🐛 [Issues](https://github.com/YOUR_USERNAME/ai-trading-bot/issues)
+- 💬 [Discussions](https://github.com/YOUR_USERNAME/ai-trading-bot/discussions)
+
+---
+
+**🚀 Happy Trading! Chúc bạn thành công với AI Trading Bot!**
 
 ## ✅ Tính Năng Đã Hoàn Thành
 
