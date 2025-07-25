@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import * as tf from '@tensorflow/tfjs-node';
+import * as tf from '@tensorflow/tfjs';
 import * as ccxt from 'ccxt';
 import AIPredictor from './AIPredictor';
 import MarketAnalyzer from '../bot/MarketAnalyzer';
@@ -39,7 +39,7 @@ interface TechnicalIndicators {
 }
 
 interface TrainingData {
-    features: number[][][];
+    features: number[][];
     labels: number[];
 }
 
@@ -164,48 +164,43 @@ class AITrainer {
             // Calculate technical indicators for features
             const sma20 = this.calculateSMA(closes, 20);
 
-            // Tạo features và labels
-            const features: number[][][] = [];
+            // Tạo features và labels cho dense model
+            const features: number[][] = [];
             const labels: number[] = [];
 
-            const startIndex = Math.max(this.config.sequenceLength, 60); // Đảm bảo có đủ dữ liệu cho indicators
+            const startIndex = Math.max(60, 0); // Đảm bảo có đủ dữ liệu cho indicators
 
             for (let i = startIndex; i < ohlcv.length - 1; i++) {
-                // Features cho sequence
-                const sequence: number[][] = [];
+                const [, open, high, low, close, volume] = ohlcv[i];
 
-                for (let j = i - this.config.sequenceLength; j < i; j++) {
-                    const [, open, high, low, close, volume] = ohlcv[j];
+                // Chuẩn hóa giá theo close price hiện tại
+                const normalizedOpen = (open - close) / close;
+                const normalizedHigh = (high - close) / close;
+                const normalizedLow = (low - close) / close;
+                const normalizedVolume = Math.log(volume + 1) / 20; // Log normalize volume
 
-                    // Chuẩn hóa giá theo close price hiện tại
-                    const normalizedOpen = (open - close) / close;
-                    const normalizedHigh = (high - close) / close;
-                    const normalizedLow = (low - close) / close;
-                    const normalizedVolume = Math.log(volume + 1) / 20; // Log normalize volume
+                // Thêm indicators nếu có
+                const rsiIndex = i - (closes.length - rsi.length);
+                const macdIndex = i - (closes.length - macd.macd.length);
+                const smaIndex = i - (closes.length - sma20.length);
 
-                    // Thêm indicators nếu có
-                    const rsiIndex = j - (closes.length - rsi.length);
-                    const macdIndex = j - (closes.length - macd.macd.length);
-                    const smaIndex = j - (closes.length - sma20.length);
+                const normalizedRSI = rsiIndex >= 0 ? (rsi[rsiIndex] - 50) / 50 : 0;
+                const normalizedMACD = macdIndex >= 0 ? macd.macd[macdIndex] / close : 0;
+                const normalizedSMA = smaIndex >= 0 ? (sma20[smaIndex] - close) / close : 0;
 
-                    const normalizedRSI = rsiIndex >= 0 ? (rsi[rsiIndex] - 50) / 50 : 0;
-                    const normalizedMACD = macdIndex >= 0 ? macd.macd[macdIndex] / close : 0;
-                    const normalizedSMA = smaIndex >= 0 ? (sma20[smaIndex] - close) / close : 0;
+                const currentFeatures = [
+                    normalizedOpen,
+                    normalizedHigh,
+                    normalizedLow,
+                    normalizedVolume,
+                    normalizedRSI,
+                    normalizedMACD,
+                    normalizedSMA
+                ];
 
-                    sequence.push([
-                        normalizedOpen,
-                        normalizedHigh,
-                        normalizedLow,
-                        normalizedVolume,
-                        normalizedRSI,
-                        normalizedMACD,
-                        normalizedSMA
-                    ]);
-                }
+                features.push(currentFeatures);
 
-                features.push(sequence);
-
-                // Label: Giá sẽ tăng hay giảm trong 5 periods tiếp theo
+                // Label: Giá sẽ tăng hay giảm trong period tiếp theo
                 const currentPrice = ohlcv[i][4];
                 const futurePrice = ohlcv[i + 1][4];
                 const priceChange = (futurePrice - currentPrice) / currentPrice;
@@ -236,12 +231,12 @@ class AITrainer {
     /**
      * Huấn luyện mô hình
      */
-    async trainModel(features: number[][][], labels: number[]): Promise<TrainingResults> {
+    async trainModel(features: number[][], labels: number[]): Promise<TrainingResults> {
         try {
             Logger.info('🤖 Bắt đầu huấn luyện mô hình AI...');
 
             // Chuyển đổi dữ liệu thành tensors
-            const xs = tf.tensor3d(features);
+            const xs = tf.tensor2d(features);
             const ys = tf.tensor2d(labels.map(label => [label]));
 
             Logger.info(`📊 Input shape: [${xs.shape.join(', ')}]`);
@@ -262,17 +257,20 @@ class AITrainer {
                 }
             };
 
-            // Create a simple model for training
+            // Create a simple dense model for training
             const model = tf.sequential({
                 layers: [
-                    tf.layers.lstm({
-                        units: 50,
-                        returnSequences: true,
-                        inputShape: [this.config.sequenceLength, 7]
+                    tf.layers.dense({
+                        units: 64,
+                        activation: 'relu',
+                        inputShape: [7] // Flatten the sequence data
                     }),
-                    tf.layers.dropout({ rate: 0.2 }),
-                    tf.layers.lstm({ units: 50, returnSequences: false }),
-                    tf.layers.dropout({ rate: 0.2 }),
+                    tf.layers.dropout({ rate: 0.3 }),
+                    tf.layers.dense({
+                        units: 32,
+                        activation: 'relu'
+                    }),
+                    tf.layers.dropout({ rate: 0.3 }),
                     tf.layers.dense({ units: 1, activation: 'sigmoid' })
                 ]
             });

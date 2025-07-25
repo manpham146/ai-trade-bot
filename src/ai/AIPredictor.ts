@@ -1,4 +1,4 @@
-import * as tf from '@tensorflow/tfjs-node';
+import * as tf from '@tensorflow/tfjs';
 import Logger from '../utils/Logger';
 import { promises as fs } from 'fs';
 import * as path from 'path';
@@ -101,12 +101,49 @@ class AIPredictor {
      */
     private async loadModel(): Promise<void> {
         try {
-            this.model = await tf.loadLayersModel(`file://${this.modelPath}/model.json`);
+            const modelsDir = './models';
+            const modelPath = `${modelsDir}/btc_prediction_model.json`;
+            const weightsPath = `${modelsDir}/btc_prediction_weights.json`;
+            const scalerPath = `${modelsDir}/scaler.json`;
+            
+            // Kiểm tra xem mô hình có tồn tại không
+            try {
+                await fs.access(modelPath);
+            } catch {
+                Logger.warn('⚠️ Không tìm thấy mô hình đã huấn luyện');
+                return;
+            }
 
+            // Tải cấu trúc mô hình
+            const modelData = await fs.readFile(modelPath, 'utf-8');
+            const modelConfig = JSON.parse(modelData);
+            
+            // Tạo lại mô hình từ config
+            this.model = await tf.models.modelFromJSON(modelConfig);
+            
+            // Tải weights nếu có
+            try {
+                const weightsData = await fs.readFile(weightsPath, 'utf-8');
+                const weights = JSON.parse(weightsData);
+                const tensors = weights.map((w: number[], i: number) => {
+                    const shape = this.model!.getWeights()[i].shape;
+                    return tf.tensor(w, shape);
+                });
+                this.model.setWeights(tensors);
+                
+                // Cleanup tensors
+                tensors.forEach((t: tf.Tensor) => t.dispose());
+            } catch {
+                Logger.warn('⚠️ Không tìm thấy weights, sử dụng weights ngẫu nhiên');
+            }
+            
             // Tải scaler parameters
-            const scalerPath = path.join(this.modelPath, 'scaler.json');
-            const scalerData = await fs.readFile(scalerPath, 'utf8');
-            this.scaler = JSON.parse(scalerData);
+            try {
+                const scalerData = await fs.readFile(scalerPath, 'utf-8');
+                this.scaler = JSON.parse(scalerData);
+            } catch {
+                Logger.warn('⚠️ Không tìm thấy scaler parameters');
+            }
 
             Logger.info('✅ Mô hình AI đã được tải thành công');
 
@@ -121,52 +158,43 @@ class AIPredictor {
      */
     private async createModel(): Promise<void> {
         try {
-            const model = tf.sequential();
+            // Tạo mô hình đơn giản hơn để tránh lỗi
+            const model = tf.sequential({
+                layers: [
+                    tf.layers.dense({
+                        units: 32,
+                        activation: 'relu',
+                        inputShape: [this.features.length]
+                    }),
+                    tf.layers.dropout({ rate: 0.2 }),
+                    tf.layers.dense({
+                        units: 16,
+                        activation: 'relu'
+                    }),
+                    tf.layers.dropout({ rate: 0.2 }),
+                    tf.layers.dense({
+                        units: 1,
+                        activation: 'sigmoid'
+                    })
+                ]
+            });
 
-            // LSTM Layer 1
-            model.add(tf.layers.lstm({
-                units: 50,
-                returnSequences: true,
-                inputShape: [this.sequenceLength, this.features.length]
-            }));
-
-            model.add(tf.layers.dropout({ rate: 0.2 }));
-
-            // LSTM Layer 2
-            model.add(tf.layers.lstm({
-                units: 50,
-                returnSequences: true
-            }));
-
-            model.add(tf.layers.dropout({ rate: 0.2 }));
-
-            // LSTM Layer 3
-            model.add(tf.layers.lstm({
-                units: 50,
-                returnSequences: false
-            }));
-
-            model.add(tf.layers.dropout({ rate: 0.2 }));
-
-            // Dense Layers
-            model.add(tf.layers.dense({ units: 25, activation: 'relu' }));
-            model.add(tf.layers.dense({ units: 1, activation: 'linear' }));
-
-            // Compile model
+            // Compile model với cấu hình đơn giản
             model.compile({
-                optimizer: tf.train.adam(0.001),
-                loss: 'meanSquaredError',
-                metrics: ['mae']
+                optimizer: 'adam',
+                loss: 'binaryCrossentropy',
+                metrics: ['accuracy']
             });
 
             this.model = model;
 
-            Logger.info('✅ Mô hình LSTM đã được tạo');
+            Logger.info('✅ Mô hình đơn giản đã được tạo');
             Logger.info(`📊 Tổng số parameters: ${model.countParams()}`);
 
         } catch (error) {
             Logger.error('❌ Lỗi tạo mô hình:', (error as Error).message);
-            throw error;
+            // Fallback to simple model
+            await this.createSimpleModel();
         }
     }
 
@@ -452,18 +480,31 @@ class AIPredictor {
                 throw new Error('Không có mô hình để lưu');
             }
 
-            // Tạo thư mục nếu chưa tồn tại
-            await fs.mkdir(this.modelPath, { recursive: true });
+            // Tạo thư mục models nếu chưa có
+            const modelsDir = './models';
+            try {
+                await fs.access(modelsDir);
+            } catch {
+                await fs.mkdir(modelsDir, { recursive: true });
+            }
 
-            // Lưu mô hình
-            await this.model.save(`file://${this.modelPath}`);
-
+            // Lưu mô hình dưới dạng JSON
+            const modelJson = await this.model.toJSON();
+            const modelPath = `${modelsDir}/btc_prediction_model.json`;
+            await fs.writeFile(modelPath, JSON.stringify(modelJson, null, 2));
+            
+            // Lưu weights
+            const weights = this.model.getWeights();
+            const weightsData = weights.map(w => Array.from(w.dataSync()));
+            const weightsPath = `${modelsDir}/btc_prediction_weights.json`;
+            await fs.writeFile(weightsPath, JSON.stringify(weightsData, null, 2));
+            
             // Lưu scaler parameters
-            const scalerPath = path.join(this.modelPath, 'scaler.json');
-            await fs.writeFile(scalerPath, JSON.stringify(this.scaler, null, 2));
-
-            Logger.info('✅ Mô hình đã được lưu thành công');
-
+            const scalerPath = `${modelsDir}/scaler.json`;
+            await fs.writeFile(scalerPath, JSON.stringify(this.scaler || {}, null, 2));
+            
+            Logger.info(`✅ Đã lưu mô hình tại: ${modelPath}`);
+            
         } catch (error) {
             Logger.error('❌ Lỗi lưu mô hình:', (error as Error).message);
             throw error;

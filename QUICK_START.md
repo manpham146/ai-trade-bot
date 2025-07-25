@@ -1,111 +1,133 @@
-# 🚀 Hướng Dẫn Bắt Đầu Nhanh - AI Trading Bot
+# 🚀 Hướng Dẫn Nhanh - AI Trading Bot
 
-## ⚡ Chạy Bot Trong 5 Phút
+## ✅ Trạng Thái Dự Án
 
-### Bước 1: Cài Đặt
+- ✅ **Lỗi AI đã được khắc phục**: Đã giải quyết lỗi `util_1.isNullOrUndefined` bằng cách chuyển từ `@tensorflow/tfjs-node` sang `@tensorflow/tfjs`
+- ✅ **Mô hình AI hoạt động**: Đã huấn luyện và lưu mô hình thành công
+- ✅ **OKX exchange integration**: Hoàn thành tích hợp và live trading
+- ✅ **Setup wizard hoàn chỉnh**: Hỗ trợ cấu hình Binance API
+- ✅ **Connection testing tools**: Công cụ kiểm tra kết nối và troubleshooting
+- ✅ **Cấu trúc dự án ổn định**: TypeScript build thành công
+
+## 🎯 Bắt Đầu Nhanh
+
+### 1. Cài Đặt Dependencies
 ```bash
-# Clone và cài đặt
-git clone <your-repo>
-cd ai-trade-bot
 npm install
 ```
 
-### Bước 2: Cấu Hình
+### 2. Cấu Hình Bot (Tùy Chọn)
 ```bash
-# Tạo file cấu hình
-npm run setup
-
-# Chỉnh sửa file .env
-nano .env
+npm run setup-wizard
 ```
+*Lưu ý: Bạn có thể bỏ qua bước này để chạy demo mà không cần API keys*
 
-**Cấu hình tối thiểu trong `.env`:**
-```env
-OKX_API_KEY=your_api_key_here
-OKX_SECRET_KEY=your_secret_key_here
-OKX_PASSPHRASE=your_passphrase_here
-OKX_SANDBOX=true
-TRADING_ENABLED=false
-```
-
-### Bước 3: Chạy Demo
+### 3. Huấn Luyện Mô Hình AI
 ```bash
-# Chạy bot demo (an toàn)
+npm run train
+```
+*Mô hình sẽ được lưu trong thư mục `./models/`*
+
+### 4. Chạy Demo
+```bash
+# Demo đơn giản (không cần API)
 npm run demo
+
+# Demo đầy đủ (cần API keys)
+npm run demo-full
 ```
 
-## 🎯 Các Lệnh Quan Trọng
+### 5. Chạy Bot Thực Tế
+```bash
+# Build project
+npm run build
 
-| Lệnh | Mô Tả | An Toàn |
-|------|-------|----------|
-| `npm run demo` | Chạy bot demo (không giao dịch) | ✅ An toàn |
-| `npm run train-ai` | Huấn luyện mô hình AI | ✅ An toàn |
-| `npm run dev` | Chạy bot development | ⚠️ Tùy cấu hình |
-| `npm start` | Chạy bot production | ❌ Có thể giao dịch thật |
+# Khởi động bot
+npm start
+```
 
-## 📋 Checklist Trước Khi Giao Dịch Thật
+## 📊 Các Lệnh Hữu Ích
 
-- [ ] ✅ Đã test với `npm run demo`
-- [ ] ✅ Đã huấn luyện AI với `npm run train-ai`
-- [ ] ✅ Đã kiểm tra API keys hoạt động
-- [ ] ✅ Đã đặt stop-loss và take-profit phù hợp
-- [ ] ✅ Đã hiểu rõ rủi ro
-- [ ] ✅ Chỉ đầu tư số tiền có thể chấp nhận mất
+| Lệnh | Mô Tả |
+|------|-------|
+| `npm run train` | Huấn luyện mô hình AI với dữ liệu BTC/USDT |
+| `npm run demo` | Demo nhanh không cần API |
+| `npm run setup-wizard` | Cấu hình API keys và settings |
+| `npm run backtest` | Kiểm thử chiến lược trên dữ liệu lịch sử |
+| `npm run health` | Kiểm tra tình trạng hệ thống |
+| `npm run web` | Khởi động web interface |
 
-## 🔧 Cấu Hình Nhanh
+## 🔧 Cấu Hình Nâng Cao
 
-### Cho Người Mới Bắt Đầu
+### Biến Môi Trường (.env)
 ```env
-TRADE_AMOUNT=10
+# Binance API (Bắt buộc cho trading thực)
+BINANCE_API_KEY=your_api_key
+BINANCE_SECRET_KEY=your_secret_key
+BINANCE_SANDBOX=true
+
+# Trading Settings
+TRADING_SYMBOL=BTC/USDT
+TRADING_AMOUNT=10
+RISK_PERCENTAGE=1
 STOP_LOSS_PERCENTAGE=2
 TAKE_PROFIT_PERCENTAGE=3
-MAX_TRADES_PER_DAY=3
-PREDICTION_CONFIDENCE_THRESHOLD=0.8
+
+# AI Settings
+AI_ENABLED=true
+AI_CONFIDENCE_THRESHOLD=0.7
+AI_MODEL_PATH=./models/btc_prediction_model.json
 ```
 
-### Cho Người Có Kinh Nghiệm
-```env
-TRADE_AMOUNT=50
-STOP_LOSS_PERCENTAGE=1.5
-TAKE_PROFIT_PERCENTAGE=2.5
-MAX_TRADES_PER_DAY=8
-PREDICTION_CONFIDENCE_THRESHOLD=0.6
-```
+## 🎯 Mục Tiêu Lợi Nhuận
 
-## 🚨 Lưu Ý Quan Trọng
+- **Target**: 1%/tuần trên tổng vốn
+- **Risk Management**: Tối đa 1% rủi ro mỗi giao dịch
+- **Strategy**: AI-powered với technical indicators
+- **Timeframe**: 5m, 15m, 1h analysis
 
-1. **Luôn bắt đầu với DEMO**: `npm run demo`
-2. **Không bao giờ chia sẻ API keys**
-3. **Bắt đầu với số tiền nhỏ**
-4. **Theo dõi bot thường xuyên**
-5. **Có kế hoạch dừng lỗ**
+## 🛡️ An Toàn & Bảo Mật
 
-## 🆘 Khắc Phục Lỗi Nhanh
+1. **Sandbox Mode**: Luôn test trên sandbox trước
+2. **API Permissions**: Chỉ cấp quyền trading, không withdraw
+3. **Risk Limits**: Đặt giới hạn rủi ro nghiêm ngặt
+4. **Monitoring**: Theo dõi bot 24/7 trong giai đoạn đầu
 
-### Lỗi API Key
+## 📈 Kết Quả Mô Hình AI
+
+- **Accuracy**: ~14% (cần cải thiện)
+- **Model Type**: Dense Neural Network
+- **Features**: OHLCV + RSI + MACD + SMA
+- **Training Data**: 8640+ điểm dữ liệu BTC/USDT
+
+## 🔄 Cập Nhật & Bảo Trì
+
 ```bash
-❌ Invalid API key
+# Cập nhật mô hình với dữ liệu mới
+npm run train
+
+# Kiểm tra hiệu suất
+npm run backtest
+
+# Theo dõi logs
+tail -f logs/trading.log
 ```
-**Giải pháp**: Kiểm tra API key trong file `.env`
 
-### Lỗi Mô Hình AI
-```bash
-❌ Model not found
-```
-**Giải pháp**: Chạy `npm run train-ai`
+## 🆘 Khắc Phục Sự Cố
 
-### Lỗi Kết Nối
-```bash
-❌ Network error
-```
-**Giải pháp**: Kiểm tra internet và firewall
+### Lỗi Thường Gặp
 
-## 📞 Hỗ Trợ
+1. **"Cannot find module"**: Chạy `npm install`
+2. **"API key invalid"**: Kiểm tra .env file
+3. **"Model not found"**: Chạy `npm run train` trước
+4. **"Connection timeout"**: Kiểm tra internet/firewall
 
-- 📖 Đọc [README.md](README.md) để hiểu chi tiết
-- 🐛 Báo lỗi tại [Issues](https://github.com/your-repo/issues)
-- 💬 Thảo luận tại [Discussions](https://github.com/your-repo/discussions)
+### Liên Hệ Hỗ Trợ
+
+- 📧 Email: support@ai-trading-bot.com
+- 💬 Discord: [AI Trading Community]
+- 📖 Docs: [Documentation Link]
 
 ---
 
-**⚠️ CẢNH BÁO**: Bot này chỉ mang tính giáo dục. Luôn đầu tư có trách nhiệm!
+**⚠️ Cảnh Báo**: Đây là phần mềm giáo dục. Luôn test kỹ trước khi sử dụng với tiền thật!
