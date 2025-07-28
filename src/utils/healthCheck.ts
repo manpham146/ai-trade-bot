@@ -4,7 +4,8 @@ import * as path from 'path';
 import * as os from 'os';
 import * as dotenv from 'dotenv';
 import Logger from './Logger';
-import AIPredictor from '../ai/AIPredictor';
+import { AIManager } from '../ai/AIManager';
+import { AIFactory } from '../ai/AIFactory';
 
 // Load environment variables
 dotenv.config();
@@ -237,35 +238,34 @@ class HealthChecker {
     }
 
     /**
-     * Kiểm tra mô hình AI
+     * Kiểm tra External AI
      */
     private async checkAIModel(): Promise<void> {
         try {
-            const aiPredictor = new AIPredictor();
+            const aiFactory = AIFactory.getInstance();
+            const aiManager = await aiFactory.createAIManagerFromEnv();
 
-            // Kiểm tra file mô hình
-            const modelPath = path.join(__dirname, '../../models');
-            const modelFiles = await fs.readdir(modelPath).catch(() => []);
+            // Kiểm tra External AI providers
+            const availableProviders = aiFactory.getAvailableProviders();
 
             this.results.details.aiModel = {
-                modelPath: modelPath,
-                modelFiles: modelFiles.length,
-                files: modelFiles
+                modelPath: 'External AI (Gemini/Claude/OpenAI)',
+                modelFiles: availableProviders.length,
+                files: availableProviders.map((p: string) => `${p} provider`)
             };
 
-            if (modelFiles.length > 0) {
-                // Thử khởi tạo AI
-                await aiPredictor.initialize();
+            if (availableProviders.length > 0) {
+                // Thử khởi tạo AI Manager
                 this.checks.aiModel = true;
-                Logger.info('✅ Mô hình AI: OK');
+                Logger.info('✅ External AI: OK');
             } else {
-                this.results.warnings.push('No AI model found. Run "npm run train-ai" to create one.');
-                Logger.warn('⚠️ Chưa có mô hình AI. Chạy "npm run train-ai" để tạo mô hình.');
+                this.results.warnings.push('No External AI providers configured. Please set API keys.');
+                Logger.warn('⚠️ Chưa cấu hình External AI. Vui lòng thiết lập API keys.');
             }
 
         } catch (error) {
-            this.results.errors.push(`AI model check failed: ${(error as Error).message}`);
-            Logger.error('❌ Lỗi kiểm tra mô hình AI:', (error as Error).message);
+            this.results.errors.push(`External AI check failed: ${(error as Error).message}`);
+            Logger.error('❌ Lỗi kiểm tra External AI:', (error as Error).message);
         }
     }
 
@@ -351,7 +351,7 @@ class HealthChecker {
             const devDepsCount = Object.keys(packageData.devDependencies || {}).length;
 
             // Kiểm tra một số dependencies quan trọng
-            const criticalDeps = ['ccxt', '@tensorflow/tfjs-node', 'dotenv', 'express'];
+            const criticalDeps = ['ccxt', 'dotenv', 'express'];
             const missingCritical = criticalDeps.filter(dep => !dependencies.includes(dep));
 
             this.results.details.dependencies = {

@@ -1,9 +1,10 @@
 import * as ccxt from 'ccxt';
 import * as cron from 'node-cron';
-import MarketAnalyzer from './MarketAnalyzer.js';
-import AIPredictor from '../ai/AIPredictor.js';
-import RiskManager from './RiskManager.js';
-import Logger from '../utils/Logger.js';
+import MarketAnalyzer from './MarketAnalyzer';
+import AIManager from '../ai/AIManager';
+import AIFactory from '../ai/AIFactory';
+import RiskManager from './RiskManager';
+import Logger from '../utils/Logger';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 
@@ -73,7 +74,7 @@ interface TechnicalAnalysis {
 interface AIPrediction {
     signal: 'BUY' | 'SELL' | 'HOLD';
     confidence: number;
-    rawPrediction: number;
+    rawPrediction?: number;
     timestamp: number;
     note?: string;
 }
@@ -112,7 +113,7 @@ class TradingBot {
     private config: BotConfig;
     private exchange: ccxt.Exchange | null = null;
     private marketAnalyzer: MarketAnalyzer;
-    private aiPredictor: AIPredictor;
+    private aiManager: AIManager | null = null;
     private riskManager: RiskManager;
     private isRunning: boolean = false;
     private currentPosition: Position | null = null;
@@ -140,7 +141,6 @@ class TradingBot {
     constructor(config: BotConfig) {
         this.config = config;
         this.marketAnalyzer = new MarketAnalyzer();
-        this.aiPredictor = new AIPredictor();
         this.riskManager = new RiskManager();
         this.tradingEnabled = process.env.TRADING_ENABLED === 'true';
 
@@ -176,6 +176,32 @@ class TradingBot {
     }
 
     /**
+     * Khởi tạo AI Manager
+     */
+    async initializeAI(): Promise<void> {
+        const aiAdvisorEnabled = process.env.AI_ADVISOR_ENABLED === 'true';
+        
+        if (!aiAdvisorEnabled) {
+            Logger.info('🔇 AI Advisor bị tắt - Bot sẽ chỉ sử dụng phân tích kỹ thuật');
+            this.aiManager = null;
+            return;
+        }
+        
+        try {
+            Logger.info('🤖 Đang khởi tạo AI Manager...');
+            
+            const factory = AIFactory.getInstance();
+            this.aiManager = await factory.createAIManagerFromEnv();
+            
+            Logger.info('✅ AI Manager đã được khởi tạo thành công!');
+        } catch (error) {
+            Logger.error('❌ Lỗi khởi tạo AI Manager:', error as Error);
+            Logger.warn('🔄 Chuyển sang chế độ phân tích kỹ thuật thuần túy');
+            this.aiManager = null;
+        }
+    }
+
+    /**
      * Khởi động bot
      */
     async start(): Promise<void> {
@@ -183,6 +209,7 @@ class TradingBot {
             Logger.info('🚀 Đang khởi động Trading Bot...');
 
             await this.initializeExchange();
+            await this.initializeAI();
             await this.loadData();
 
             this.isRunning = true;
@@ -219,10 +246,19 @@ class TradingBot {
             const technicalAnalysis = await this.marketAnalyzer.analyze(marketData);
             this.lastTechnicalAnalysis = technicalAnalysis;
 
-            // 3. Dự đoán AI
-            const aiPrediction = await this.aiPredictor.predict(marketData);
+            // 3. Dự đoán AI (kiểm tra cấu hình AI_ADVISOR_ENABLED)
+            let aiPrediction: AIPrediction;
+            const aiAdvisorEnabled = process.env.AI_ADVISOR_ENABLED === 'true';
+            
+            if (aiAdvisorEnabled && this.aiManager) {
+                Logger.info('🤖 AI Advisor được bật - Đang lấy dự đoán AI...');
+                aiPrediction = await this.aiManager.predict(marketData);
+                await this.saveAIPrediction(aiPrediction);
+            } else {
+                Logger.info('🔇 AI Advisor bị tắt - Sử dụng phân tích kỹ thuật thuần túy');
+                aiPrediction = this.getFallbackAIPrediction(technicalAnalysis);
+            }
             this.lastAIPrediction = aiPrediction;
-            await this.saveAIPrediction(aiPrediction);
 
             // 4. Đánh giá rủi ro
             const riskAssessment = await this.riskManager.assess({
@@ -279,48 +315,120 @@ class TradingBot {
     }
 
     /**
-     * Đưa ra quyết định giao dịch
+     * Đưa ra quyết định giao dịch theo chiến lược mới: An toàn vốn là ưu tiên số một
      */
     makeDecision({ technical, ai, risk }: {
         technical: TechnicalAnalysis;
         ai: AIPrediction;
         risk: RiskAssessment;
     }): TradingDecision {
-        // Nếu rủi ro quá cao, không giao dịch
+        // Kiểm tra giới hạn lỗ tuần bằng RiskManager
+        if (!this.riskManager.checkWeeklyLossLimit(this.stats.currentBalance, this.stats.weeklyProfit)) {
+            return {
+                action: 'HOLD',
+                confidence: 0,
+                reasoning: '🛡️ Dừng giao dịch: Lỗ tuần vượt quá 1.5%'
+            };
+        }
+
+        // Kiểm tra rủi ro cao
         if (risk.level === 'HIGH') {
             return {
                 action: 'HOLD',
                 confidence: 0,
-                reasoning: `Rủi ro quá cao (${risk.level})`
+                reasoning: '⚠️ Rủi ro cao - Không giao dịch'
             };
         }
 
-        // Kết hợp tín hiệu từ technical analysis và AI
-        const signals = [technical.signal, ai.signal];
-        const buySignals = signals.filter(s => s === 'BUY').length;
-        const sellSignals = signals.filter(s => s === 'SELL').length;
+        // Chỉ giao dịch khi có xu hướng rõ ràng (không sideways)
+        if ((technical as any).dailyTrend === 'SIDEWAYS') {
+            return {
+                action: 'HOLD',
+                confidence: 0,
+                reasoning: '📊 Thị trường sideway - Chờ xu hướng rõ ràng'
+            };
+        }
 
-        const avgConfidence = (technical.confidence + ai.confidence) / 2;
+        // Kiểm tra điều kiện vào lệnh
+        if (!(technical as any).entryCondition) {
+            return {
+                action: 'HOLD',
+                confidence: technical.confidence,
+                reasoning: '⏳ Chờ điều kiện vào lệnh phù hợp'
+            };
+        }
 
-        if (buySignals >= 2 && avgConfidence > 0.7) {
+        // Kiểm tra AI Advisor có được bật không
+        const aiAdvisorEnabled = process.env.AI_ADVISOR_ENABLED === 'true';
+        
+        // AI xác nhận tín hiệu kỹ thuật (hoặc chỉ dùng technical nếu AI tắt)
+        const aiConfirms = aiAdvisorEnabled 
+            ? (technical.signal === ai.signal) && (ai.confidence > 0.6)
+            : technical.confidence > 0.7; // Yêu cầu confidence cao hơn khi không có AI
+        
+        if (technical.signal === 'BUY' && aiConfirms && !this.currentPosition) {
+            // Tính toán position size an toàn với RiskManager
+            const stopLossPrice = risk.stopLoss;
+            const safePositionSize = this.riskManager.calculateSafePositionSize(
+                this.stats.currentBalance,
+                this.lastMarketData!.price,
+                stopLossPrice
+            );
+            const positionSize = Math.min(safePositionSize / this.lastMarketData!.price, risk.positionSizing);
+            
+            const reasoning = aiAdvisorEnabled 
+                ? `🎯 LONG: Xu hướng tăng D1 + Pullback EMA20 + AI xác nhận (${ai.confidence.toFixed(2)})`
+                : `📈 LONG: Xu hướng tăng D1 + Pullback EMA20 (Technical only - ${technical.confidence.toFixed(2)})`;
+            
             return {
                 action: 'BUY',
-                confidence: avgConfidence,
-                amount: risk.positionSizing,
-                reasoning: 'Tín hiệu mua mạnh từ cả technical và AI'
+                confidence: aiAdvisorEnabled ? Math.min(technical.confidence, ai.confidence) : technical.confidence,
+                amount: positionSize,
+                reasoning
             };
-        } else if (sellSignals >= 2 && avgConfidence > 0.7) {
+        }
+        
+        if (technical.signal === 'SELL' && aiConfirms && this.currentPosition?.side === 'BUY') {
+            const reasoning = aiAdvisorEnabled 
+                ? `🎯 Chốt lời/cắt lỗ: AI xác nhận tín hiệu bán (${ai.confidence.toFixed(2)})`
+                : `📉 Chốt lời/cắt lỗ: Tín hiệu kỹ thuật bán (${technical.confidence.toFixed(2)})`;
+                
             return {
                 action: 'SELL',
-                confidence: avgConfidence,
-                reasoning: 'Tín hiệu bán mạnh từ cả technical và AI'
+                confidence: aiAdvisorEnabled ? Math.min(technical.confidence, ai.confidence) : technical.confidence,
+                reasoning
             };
+        }
+
+        // Kiểm tra stop loss và take profit
+        if (this.currentPosition) {
+            const currentPrice = this.lastMarketData!.price;
+            const entryPrice = this.currentPosition.entryPrice;
+            const profitPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
+            
+            // Take Profit: 0.3% - 0.5%
+            if (profitPercent >= 0.3) {
+                return {
+                    action: 'SELL',
+                    confidence: 1.0,
+                    reasoning: `💰 Take Profit: Đạt mục tiêu ${profitPercent.toFixed(2)}%`
+                };
+            }
+            
+            // Stop Loss theo swing high/low
+            if (this.currentPosition.stopLoss && currentPrice <= this.currentPosition.stopLoss) {
+                return {
+                    action: 'SELL',
+                    confidence: 1.0,
+                    reasoning: `🛡️ Stop Loss: Bảo vệ vốn tại ${this.currentPosition.stopLoss}`
+                };
+            }
         }
 
         return {
             action: 'HOLD',
-            confidence: avgConfidence,
-            reasoning: 'Tín hiệu không đủ mạnh hoặc mâu thuẫn'
+            confidence: Math.max(technical.confidence, ai.confidence),
+            reasoning: '🔍 Chờ tín hiệu rõ ràng hơn - Ưu tiên an toàn vốn'
         };
     }
 
@@ -340,7 +448,7 @@ class TradingBot {
     }
 
     /**
-     * Thực hiện lệnh mua
+     * Thực hiện lệnh mua với stop loss và take profit theo chiến lược mới
      */
     async buy(price: number, amount: number): Promise<void> {
         if (!this.exchange) {
@@ -351,12 +459,33 @@ class TradingBot {
             Logger.info(`📈 Thực hiện lệnh MUA: ${amount} ${this.config.symbol} @ ${price}`);
 
             const order = await this.exchange.createMarketBuyOrder(this.config.symbol, amount);
+            const entryPrice = order.price || price;
+            
+            // Tính toán Stop Loss theo swing low gần nhất (giả sử 1% dưới entry)
+            const stopLoss = entryPrice * 0.99; // Tạm thời dùng 1%, sẽ cập nhật theo swing low thực tế
+            
+            // Tính toán Take Profit: 0.3% - 0.5%
+            const takeProfit = entryPrice * 1.003; // 0.3%
+            
+            // Kiểm tra Risk/Reward ratio tối thiểu 1:1.5
+            const riskDistance = entryPrice - stopLoss;
+            const rewardDistance = takeProfit - entryPrice;
+            const riskRewardRatio = rewardDistance / riskDistance;
+            
+            if (riskRewardRatio < 1.5) {
+                Logger.warn(`⚠️ Risk/Reward ratio thấp: ${riskRewardRatio.toFixed(2)} < 1.5`);
+                // Điều chỉnh take profit để đạt R/R 1:1.5
+                const adjustedTakeProfit = entryPrice + (riskDistance * 1.5);
+                Logger.info(`🔧 Điều chỉnh Take Profit: ${takeProfit.toFixed(2)} → ${adjustedTakeProfit.toFixed(2)}`);
+            }
 
             this.currentPosition = {
                 side: 'BUY',
                 amount: order.amount || amount,
-                entryPrice: order.price || price,
+                entryPrice,
                 entryTime: Date.now(),
+                stopLoss,
+                takeProfit,
                 id: order.id
             };
 
@@ -365,12 +494,14 @@ class TradingBot {
                 symbol: this.config.symbol,
                 side: 'BUY',
                 amount: order.amount || amount,
-                price: order.price || price,
+                price: entryPrice,
                 timestamp: Date.now()
             };
 
             await this.saveTrade(trade);
-            Logger.trade('BUY', this.config.symbol, price, amount);
+            
+            Logger.trade('BUY', this.config.symbol, entryPrice, amount);
+            Logger.info(`🎯 Stop Loss: ${stopLoss.toFixed(2)} | Take Profit: ${takeProfit.toFixed(2)} | R/R: ${riskRewardRatio.toFixed(2)}`);
 
         } catch (error) {
             Logger.error('❌ Lỗi thực hiện lệnh mua:', error as Error);
@@ -482,12 +613,25 @@ class TradingBot {
     }
 
     /**
+     * Tạo AI prediction fallback dựa trên phân tích kỹ thuật khi AI Advisor bị tắt
+     */
+    private getFallbackAIPrediction(technicalAnalysis: TechnicalAnalysis): AIPrediction {
+        return {
+            signal: technicalAnalysis.signal,
+            confidence: technicalAnalysis.confidence * 0.8, // Giảm confidence vì không có AI
+            rawPrediction: undefined,
+            timestamp: Date.now(),
+            note: 'AI Advisor disabled - Using technical analysis only'
+        };
+    }
+
+    /**
      * Lưu dự đoán AI
      */
     private async saveAIPrediction(prediction: AIPrediction): Promise<void> {
         try {
             const predictionsFile = path.join(this.dataPath, 'ai_predictions.json');
-            let predictions: (AIPrediction & { timestamp: number })[] = [];
+            let predictions: (AIPrediction & { timestamp: number; })[] = [];
 
             try {
                 const data = await fs.readFile(predictionsFile, 'utf8');

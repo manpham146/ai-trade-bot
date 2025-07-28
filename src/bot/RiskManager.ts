@@ -105,58 +105,164 @@ class RiskManager {
     private maxHistoryLength: number = 100;
 
     constructor() {
-        this.maxPositionSize = parseFloat(process.env.MAX_POSITION_SIZE || '100');
-        this.stopLossPercentage = parseFloat(process.env.STOP_LOSS_PERCENTAGE || '2');
-        this.takeProfitPercentage = parseFloat(process.env.TAKE_PROFIT_PERCENTAGE || '3');
-        this.maxTradesPerDay = parseInt(process.env.MAX_TRADES_PER_DAY || '5');
+        // Chiến lược mới: An toàn vốn là ưu tiên số một
+        this.maxPositionSize = parseFloat(process.env.MAX_POSITION_SIZE || '50'); // Giảm position size
+        this.stopLossPercentage = parseFloat(process.env.STOP_LOSS_PERCENTAGE || '1'); // Giảm stop loss
+        this.takeProfitPercentage = parseFloat(process.env.TAKE_PROFIT_PERCENTAGE || '0.5'); // TP: 0.3-0.5%
+        this.maxTradesPerDay = parseInt(process.env.MAX_TRADES_PER_DAY || '3'); // Giảm số lệnh/ngày
     }
 
     /**
-     * Đánh giá rủi ro tổng thể
+     * Kiểm tra giới hạn lỗ tuần (1.5%)
+     */
+    checkWeeklyLossLimit(currentBalance: number, weeklyProfit: number): boolean {
+        const weeklyLossPercent = (weeklyProfit / currentBalance) * 100;
+        return weeklyLossPercent >= -1.5; // true nếu chưa vượt giới hạn
+    }
+
+    /**
+     * Tính toán position size với rủi ro tối đa 0.5% mỗi lệnh
+     */
+    calculateSafePositionSize(balance: number, entryPrice: number, stopLoss: number): number {
+        const maxRiskAmount = balance * 0.005; // 0.5% của tài khoản
+        const riskPerUnit = Math.abs(entryPrice - stopLoss);
+        
+        if (riskPerUnit === 0) return 0;
+        
+        const maxUnits = maxRiskAmount / riskPerUnit;
+        const maxPositionValue = maxUnits * entryPrice;
+        
+        // Giới hạn position không quá 10% tài khoản
+        const maxAllowedValue = balance * 0.1;
+        
+        return Math.min(maxPositionValue, maxAllowedValue);
+    }
+
+    /**
+     * Đánh giá rủi ro tổng thể theo chiến lược mới
      */
     async assess(data: RiskAssessmentData): Promise<RiskAssessment> {
         try {
             const { marketData, technicalAnalysis, aiPrediction, currentPosition } = data;
 
-            // Đánh giá các yếu tố rủi ro
-            const volatilityRisk = this.assessVolatilityRisk(marketData);
-            const technicalRisk = this.assessTechnicalRisk(technicalAnalysis);
-            const aiConfidenceRisk = this.assessAIConfidenceRisk(aiPrediction);
-            const positionRisk = this.assessPositionRisk(currentPosition, marketData);
-            const tradingFrequencyRisk = this.assessTradingFrequencyRisk();
+            // Kiểm tra điều kiện cơ bản
+            const factors: string[] = [];
+            let riskScore = 0;
 
-            // Tính toán điểm rủi ro tổng thể
-            const overallRisk = this.calculateOverallRisk({
-                volatility: volatilityRisk,
-                technical: technicalRisk,
-                aiConfidence: aiConfidenceRisk,
-                position: positionRisk,
-                frequency: tradingFrequencyRisk
-            });
+            // 1. Kiểm tra xu hướng thị trường
+            if ((technicalAnalysis as any)?.dailyTrend === 'SIDEWAYS') {
+                riskScore += 0.8;
+                factors.push('Thị trường sideway - Rủi ro cao');
+            }
+
+            // 2. Đánh giá độ tin cậy AI
+            if (aiPrediction.confidence < 0.6) {
+                riskScore += 0.3;
+                factors.push('Độ tin cậy AI thấp');
+            }
+
+            // 3. Kiểm tra điều kiện vào lệnh
+            if (!(technicalAnalysis as any)?.entryCondition) {
+                riskScore += 0.4;
+                factors.push('Chưa đủ điều kiện vào lệnh');
+            }
+
+            // 4. Đánh giá volatility
+            const volatilityRisk = this.assessVolatilityRisk(marketData);
+            riskScore += volatilityRisk.score * 0.3;
+            if (volatilityRisk.score > 0.6) {
+                factors.push(volatilityRisk.reason);
+            }
+
+            // 5. Kiểm tra tần suất giao dịch
+            const frequencyRisk = this.assessTradingFrequencyRisk();
+            riskScore += frequencyRisk.score * 0.2;
+            if (frequencyRisk.score > 0.5) {
+                factors.push(frequencyRisk.reason);
+            }
+
+            // Giới hạn riskScore trong khoảng [0, 1]
+            riskScore = Math.min(riskScore, 1);
+
+            const level = this.getRiskLevel(riskScore);
+            const recommendations = this.getNewStrategyRecommendations(riskScore, factors);
 
             return {
-                level: this.getRiskLevel(overallRisk.score),
-                score: overallRisk.score,
-                factors: overallRisk.factors,
-                recommendations: this.getRecommendations(overallRisk),
-                positionSizing: this.calculatePositionSize(overallRisk.score, marketData),
-                stopLoss: this.calculateDynamicStopLoss(overallRisk.score, marketData),
-                takeProfit: this.calculateDynamicTakeProfit(overallRisk.score, marketData)
+                level,
+                score: riskScore,
+                factors,
+                recommendations,
+                positionSizing: this.calculateNewPositionSize(riskScore, marketData),
+                stopLoss: this.calculateSwingBasedStopLoss(marketData),
+                takeProfit: this.calculateConservativeTakeProfit(marketData)
             };
 
         } catch (error) {
             Logger.error('❌ Lỗi đánh giá rủi ro:', (error as Error).message);
             return {
                 level: 'HIGH',
-                score: 0.8,
-                factors: [],
-                recommendations: [],
+                score: 0.9,
+                factors: ['Lỗi hệ thống đánh giá rủi ro'],
+                recommendations: ['Dừng giao dịch cho đến khi khắc phục lỗi'],
                 positionSizing: 0,
                 stopLoss: 0,
                 takeProfit: 0,
                 error: (error as Error).message
             };
         }
+    }
+
+    /**
+     * Đưa ra khuyến nghị theo chiến lược mới
+     */
+    private getNewStrategyRecommendations(riskScore: number, factors: string[]): string[] {
+        const recommendations: string[] = [];
+
+        if (riskScore > 0.7) {
+            recommendations.push('🚫 KHÔNG giao dịch - Rủi ro quá cao');
+            recommendations.push('⏳ Chờ điều kiện thị trường tốt hơn');
+        } else if (riskScore > 0.5) {
+            recommendations.push('⚠️ Giảm position size xuống 50%');
+            recommendations.push('🎯 Chỉ giao dịch khi có xác nhận AI cao');
+        } else if (riskScore > 0.3) {
+            recommendations.push('✅ Có thể giao dịch với position size bình thường');
+            recommendations.push('📊 Theo dõi chặt chẽ các chỉ báo');
+        } else {
+            recommendations.push('🚀 Điều kiện tốt cho giao dịch');
+            recommendations.push('💰 Có thể tăng position size nhẹ');
+        }
+
+        return recommendations;
+    }
+
+    /**
+     * Tính toán position size theo chiến lược mới
+     */
+    private calculateNewPositionSize(riskScore: number, marketData: any): number {
+        const baseSize = this.maxPositionSize;
+        
+        if (riskScore > 0.7) return 0; // Không giao dịch
+        if (riskScore > 0.5) return baseSize * 0.5; // Giảm 50%
+        if (riskScore > 0.3) return baseSize * 0.8; // Giảm 20%
+        
+        return baseSize; // Position size đầy đủ
+    }
+
+    /**
+     * Tính toán stop loss dựa trên swing high/low
+     */
+    private calculateSwingBasedStopLoss(marketData: any): number {
+        // Tạm thời sử dụng 1% cho đến khi có dữ liệu swing
+        const currentPrice = marketData.close;
+        return currentPrice * 0.01; // 1% stop loss
+    }
+
+    /**
+     * Tính toán take profit bảo thủ (0.3-0.5%)
+     */
+    private calculateConservativeTakeProfit(marketData: any): number {
+        const currentPrice = marketData.close;
+        return currentPrice * 0.004; // 0.4% take profit
     }
 
     /**

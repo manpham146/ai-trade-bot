@@ -88,7 +88,7 @@ async function runDemo() {
         if (error.message.includes('API')) {
             Logger.info('💡 Gợi ý: Kiểm tra API keys trong file .env');
         } else if (error.message.includes('Model')) {
-            Logger.info('💡 Gợi ý: Chạy "npm run train-ai" để tạo mô hình AI');
+            Logger.info('💡 Gợi ý: Chạy "npm run test-external-ai" để kiểm tra External AI');
         } else if (error.message.includes('Network')) {
             Logger.info('💡 Gợi ý: Kiểm tra kết nối internet');
         }

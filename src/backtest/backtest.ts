@@ -1,5 +1,6 @@
 import * as ccxt from 'ccxt';
-import AIPredictor from '../ai/AIPredictor';
+import { AIManager } from '../ai/AIManager';
+import { AIFactory } from '../ai/AIFactory';
 import MarketAnalyzer from '../bot/MarketAnalyzer';
 import RiskManager from '../bot/RiskManager';
 import Logger from '../utils/Logger';
@@ -142,7 +143,7 @@ interface BacktestReport {
 class BacktestEngine {
     private config: BacktestConfig;
     private marketAnalyzer: MarketAnalyzer;
-    private aiPredictor: AIPredictor;
+    private aiManager!: AIManager;
     private riskManager: RiskManager;
     private portfolio: Portfolio;
     private results: BacktestResults;
@@ -162,8 +163,8 @@ class BacktestEngine {
         } as BacktestConfig;
 
         this.marketAnalyzer = new MarketAnalyzer();
-        this.aiPredictor = new AIPredictor();
         this.riskManager = new RiskManager();
+        // AIManager will be initialized in run() method
 
         this.portfolio = {
             balance: this.config.initialBalance,
@@ -198,8 +199,9 @@ class BacktestEngine {
             Logger.info('🔄 Bắt đầu backtest...');
             Logger.info(`📅 Từ ${this.config.startDate.toDateString()} đến ${this.config.endDate.toDateString()}`);
 
-            // Khởi tạo AI predictor
-            await this.aiPredictor.initialize();
+            // Khởi tạo AI Manager
+            const aiFactory = AIFactory.getInstance();
+            this.aiManager = await aiFactory.createAIManagerFromEnv();
 
             // Lấy dữ liệu lịch sử
             const historicalData = await this.getHistoricalData();

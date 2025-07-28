@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import Logger from '../utils/Logger';
 
 /**
@@ -79,10 +80,12 @@ declare global {
 class WebDashboard {
     private app: Application;
     private port: number;
+    private projectRoot: string;
 
     constructor() {
         this.app = express();
         this.port = parseInt(process.env.WEB_PORT || '3000');
+        this.projectRoot = path.resolve(__dirname, '../..');
         this.setupMiddleware();
         this.setupRoutes();
     }
@@ -108,6 +111,11 @@ class WebDashboard {
         this.app.get('/api/trades', this.getTrades.bind(this));
         this.app.get('/api/predictions', this.getPredictions.bind(this));
         this.app.get('/api/market-data', this.getMarketData.bind(this));
+
+        // File Management Routes
+        this.app.get('/api/file/:filePath(*)', this.getFile.bind(this));
+        this.app.post('/api/file/save', this.saveFile.bind(this));
+        this.app.get('/api/files', this.getFileList.bind(this));
 
         // Control endpoints
         this.app.post('/api/start', this.startBot.bind(this));
@@ -233,6 +241,87 @@ class WebDashboard {
             }
         } catch (error) {
             res.status(500).json({ error: (error as Error).message });
+        }
+    }
+
+    // File Management Methods
+    private async getFile(req: Request, res: Response): Promise<void> {
+        try {
+            const filePath = req.params.filePath;
+            const fullPath = path.resolve(this.projectRoot, filePath);
+
+            // Security check: ensure file is within project directory
+            if (!fullPath.startsWith(this.projectRoot)) {
+                res.status(403).json({ error: 'Access denied' });
+                return;
+            }
+
+            const content = await fsPromises.readFile(fullPath, 'utf-8');
+            res.json({ content, filePath });
+        } catch (error) {
+            res.status(404).json({ error: 'File not found', message: (error as Error).message });
+        }
+    }
+
+    private async saveFile(req: Request, res: Response): Promise<void> {
+        try {
+            const { filePath, content } = req.body;
+            const fullPath = path.resolve(this.projectRoot, filePath);
+
+            // Security check: ensure file is within project directory
+            if (!fullPath.startsWith(this.projectRoot)) {
+                res.status(403).json({ error: 'Access denied' });
+                return;
+            }
+
+            // Create backup before saving
+            try {
+                const backupPath = fullPath + '.backup.' + Date.now();
+                const originalContent = await fsPromises.readFile(fullPath, 'utf-8');
+                await fsPromises.writeFile(backupPath, originalContent);
+            } catch (error) {
+                // File might not exist, continue
+            }
+
+            await fsPromises.writeFile(fullPath, content, 'utf-8');
+            res.json({ success: true, message: 'File saved successfully' });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to save file', message: (error as Error).message });
+        }
+    }
+
+    private async getFileList(req: Request, res: Response): Promise<void> {
+        try {
+            const files = [
+                'src/index.ts',
+                'src/bot/TradingBot.ts',
+                'src/ai/AIManager.ts',
+                'src/bot/MarketAnalyzer.ts',
+                'src/bot/RiskManager.ts',
+                '.env.example',
+                'package.json',
+                'README.md'
+            ];
+
+            const fileList = [];
+            for (const file of files) {
+                try {
+                    const fullPath = path.resolve(this.projectRoot, file);
+                    const stats = await fsPromises.stat(fullPath);
+                    fileList.push({
+                        path: file,
+                        name: path.basename(file),
+                        size: stats.size,
+                        modified: stats.mtime
+                    });
+                } catch (error) {
+                    // File doesn't exist, skip
+                }
+            }
+
+            res.json({ files: fileList });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to get file list', message: (error as Error).message });
         }
     }
 

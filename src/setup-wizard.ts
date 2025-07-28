@@ -68,7 +68,7 @@ class SetupWizard {
         this.config.exchangeApiKey = await this.ask('Nhập OKX API Key: ');
         this.config.exchangeSecret = await this.ask('Nhập OKX Secret Key: ');
         this.config.exchangePassphrase = await this.ask('Nhập OKX Passphrase: ');
-        
+
         const sandboxChoice = await this.ask('Sử dụng Demo Trading (khuyến nghị cho test)? (y/n): ');
         this.config.exchangeSandbox = sandboxChoice.toLowerCase() === 'y';
 
@@ -80,13 +80,13 @@ class SetupWizard {
      */
     private async collectTradingSettings(): Promise<void> {
         console.log('💰 BƯỚC 2: Cấu hình Giao Dịch');
-        
+
         const symbol = await this.ask('Trading pair (mặc định BTC/USDT): ');
         this.config.tradingSymbol = symbol || 'BTC/USDT';
-        
+
         const amount = await this.ask('Số tiền mỗi lệnh ($) (mặc định 10): ');
         this.config.tradingAmount = parseFloat(amount) || 10;
-        
+
         const maxTrades = await this.ask('Số lệnh tối đa mỗi ngày (mặc định 5): ');
         this.config.maxDailyTrades = parseInt(maxTrades) || 5;
 
@@ -99,16 +99,16 @@ class SetupWizard {
     private async collectRiskSettings(): Promise<void> {
         console.log('🛡️ BƯỚC 3: Quản Lý Rủi Ro (Quan trọng!)');
         console.log('Mục tiêu: 1%/tuần với rủi ro thấp\n');
-        
+
         const stopLoss = await this.ask('Stop Loss % (mặc định 2%): ');
         this.config.stopLossPercentage = parseFloat(stopLoss) || 2;
-        
+
         const takeProfit = await this.ask('Take Profit % (mặc định 3%): ');
         this.config.takeProfitPercentage = parseFloat(takeProfit) || 3;
-        
+
         const riskPerTrade = await this.ask('Risk per trade % của tổng vốn (mặc định 1%): ');
         this.config.riskPerTrade = parseFloat(riskPerTrade) / 100 || 0.01;
-        
+
         const maxPosition = await this.ask('Max position size % của tổng vốn (mặc định 10%): ');
         this.config.maxPositionSize = parseFloat(maxPosition) / 100 || 0.1;
 
@@ -120,7 +120,7 @@ class SetupWizard {
      */
     private async collectAISettings(): Promise<void> {
         console.log('🧠 BƯỚC 4: Cấu hình AI');
-        
+
         const confidence = await this.ask('AI Confidence threshold (0.1-1.0, mặc định 0.7): ');
         this.config.predictionConfidenceThreshold = parseFloat(confidence) || 0.7;
 
@@ -204,7 +204,7 @@ DATA_RETENTION_DAYS=90
         console.log('🎉 SETUP HOÀN THÀNH!');
         console.log('\n📋 CÁC BƯỚC TIẾP THEO:');
         console.log('1. npm run build          # Build project');
-        console.log('2. npm run train-ai       # Huấn luyện AI (tùy chọn)');
+        console.log('2. npm run test-external-ai # Kiểm tra External AI');
         console.log('3. npm start              # Chạy bot');
         console.log('\n⚠️  LƯU Ý:');
         console.log('- Bot sẽ chạy ở sandbox mode để test an toàn');
