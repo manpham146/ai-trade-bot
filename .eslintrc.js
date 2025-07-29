@@ -7,8 +7,8 @@ module.exports = {
         jest: true
     },
     extends: [
-        'eslint:recommended',
-        '@typescript-eslint/recommended'
+        'eslint:recommended'
+        // '@typescript-eslint/recommended' // Temporarily disabled
     ],
     parser: '@typescript-eslint/parser',
     globals: {

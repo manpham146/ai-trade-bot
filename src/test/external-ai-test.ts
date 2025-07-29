@@ -2,7 +2,7 @@
 
 /**
  * 🧪 External AI Test Script
- * 
+ *
  * Kiểm tra cấu hình External AI và khả năng kết nối
  */
 
@@ -27,7 +27,7 @@ class ExternalAITester {
 
     async runAllTests(): Promise<void> {
         console.log('🧪 Bắt đầu kiểm tra External AI Configuration...');
-        console.log('=' .repeat(60));
+        console.log('='.repeat(60));
 
         // Test 1: Environment Configuration
         await this.testEnvironmentConfig();
@@ -54,7 +54,7 @@ class ExternalAITester {
 
         const requiredVars = [
             'AI_PRIMARY_PROVIDER',
-            'AI_FALLBACK_PROVIDER', 
+            'AI_FALLBACK_PROVIDER',
             'EXTERNAL_AI_SERVICE',
             'GEMINI_API_KEY'
         ];
@@ -74,7 +74,7 @@ class ExternalAITester {
         // Check AI provider settings
         const primaryProvider = process.env.AI_PRIMARY_PROVIDER;
         const externalService = process.env.EXTERNAL_AI_SERVICE;
-        
+
         if (primaryProvider === 'external') {
             console.log('✅ Primary provider: External AI');
         } else {
@@ -107,7 +107,7 @@ class ExternalAITester {
 
             const responseTime = endTime - startTime;
             console.log(`✅ AI Manager initialized successfully in ${responseTime}ms`);
-            
+
             // Get provider info
             const stats = aiManager.getStats();
             console.log(`✅ Current provider: ${stats.currentProvider}`);
@@ -119,7 +119,6 @@ class ExternalAITester {
                 status: 'SUCCESS',
                 responseTime
             });
-
         } catch (error) {
             console.log(`❌ Failed to initialize AI Manager: ${(error as Error).message}`);
             this.results.push({
@@ -172,7 +171,6 @@ class ExternalAITester {
                 responseTime,
                 confidence: prediction.confidence
             });
-
         } catch (error) {
             console.log(`❌ Failed to get AI prediction: ${(error as Error).message}`);
             this.results.push({
@@ -200,10 +198,14 @@ class ExternalAITester {
             console.log(`🔧 Available providers: ${availableProviders.join(', ')}`);
 
             if (availableProviders.length > 1) {
-                const targetProvider = availableProviders.find(p => p !== initialStats.currentProvider);
+                const targetProvider = availableProviders.find(
+                    p => p !== initialStats.currentProvider
+                );
                 if (targetProvider) {
                     console.log(`🔄 Attempting to switch to: ${targetProvider}`);
-                    const switched = await aiManager.switchProvider(targetProvider as AIProviderType);
+                    const switched = await aiManager.switchProvider(
+                        targetProvider as AIProviderType
+                    );
                     if (switched) {
                         console.log(`✅ Successfully switched to: ${targetProvider}`);
                     } else {
@@ -218,7 +220,6 @@ class ExternalAITester {
                 provider: 'Provider Switching',
                 status: 'SUCCESS'
             });
-
         } catch (error) {
             console.log(`❌ Provider switching test failed: ${(error as Error).message}`);
             this.results.push({
@@ -257,7 +258,6 @@ class ExternalAITester {
                 provider: 'Cost Monitoring',
                 status: 'SUCCESS'
             });
-
         } catch (error) {
             console.log(`❌ Cost monitoring test failed: ${(error as Error).message}`);
             this.results.push({
@@ -270,13 +270,13 @@ class ExternalAITester {
 
     private printSummary(): void {
         console.log('\n📋 Test Summary');
-        console.log('=' .repeat(60));
+        console.log('='.repeat(60));
 
         const successCount = this.results.filter(r => r.status === 'SUCCESS').length;
         const totalCount = this.results.length;
 
         console.log(`\n🎯 Overall Result: ${successCount}/${totalCount} tests passed`);
-        
+
         if (successCount === totalCount) {
             console.log('🎉 All tests passed! External AI is ready to use.');
         } else {
@@ -287,7 +287,9 @@ class ExternalAITester {
         this.results.forEach(result => {
             const status = result.status === 'SUCCESS' ? '✅' : '❌';
             const time = result.responseTime ? ` (${result.responseTime}ms)` : '';
-            const confidence = result.confidence ? ` - ${(result.confidence * 100).toFixed(1)}%` : '';
+            const confidence = result.confidence
+                ? ` - ${(result.confidence * 100).toFixed(1)}%`
+                : '';
             console.log(`${status} ${result.provider}${time}${confidence}`);
             if (result.error) {
                 console.log(`   Error: ${result.error}`);

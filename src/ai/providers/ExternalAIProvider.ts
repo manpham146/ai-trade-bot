@@ -1,6 +1,6 @@
 /**
  * 🌐 External AI Provider
- * 
+ *
  * Provider thống nhất cho tất cả AI services bên ngoài
  * Quản lý Gemini, Claude, OpenAI với fallback tự động
  */
@@ -73,7 +73,7 @@ export class ExternalAIProvider implements IAIProvider {
             Logger.info('✅ External AI Provider initialized successfully', {
                 primaryService: this.config.service,
                 availableServices: Array.from(this.providers.keys()),
-                initTime: this.initTime + 'ms'
+                initTime: `${this.initTime}ms`
             });
         } catch (error) {
             this.lastError = error instanceof Error ? error.message : 'Unknown error';
@@ -140,7 +140,7 @@ export class ExternalAIProvider implements IAIProvider {
                 // Thử fallback services
                 if (this.config.fallbackServices) {
                     for (const fallbackService of this.config.fallbackServices) {
-                        if (fallbackService === this.currentService) continue;
+                        if (fallbackService === this.currentService) { continue; }
 
                         const fallbackProvider = this.providers.get(fallbackService);
                         if (fallbackProvider && fallbackProvider.isReady()) {
@@ -179,7 +179,7 @@ export class ExternalAIProvider implements IAIProvider {
      * Kiểm tra trạng thái provider
      */
     isReady(): boolean {
-        if (!this.isInitialized) return false;
+        if (!this.isInitialized) { return false; }
 
         // Kiểm tra ít nhất 1 service có sẵn
         for (const provider of this.providers.values()) {
@@ -224,7 +224,7 @@ export class ExternalAIProvider implements IAIProvider {
      * Tính chi phí trung bình per request
      */
     private getAverageCostPerRequest(): number {
-        if (this.requestCount === 0) return 0;
+        if (this.requestCount === 0) { return 0; }
         return this.totalCost / this.requestCount;
     }
 
@@ -288,7 +288,7 @@ export class ExternalAIProvider implements IAIProvider {
                 totalRequests: this.requestCount,
                 totalErrors: this.errorCount,
                 totalCost: this.totalCost.toFixed(4),
-                successRate: ((this.requestCount - this.errorCount) / this.requestCount * 100).toFixed(2) + '%'
+                successRate: `${((this.requestCount - this.errorCount) / this.requestCount * 100).toFixed(2)}%`
             });
         } catch (error) {
             Logger.warn('Error disposing External AI Provider:', error as any);

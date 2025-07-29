@@ -1,6 +1,6 @@
 /**
  * 🤖 Claude AI Provider
- * 
+ *
  * Provider cho Anthropic Claude AI
  * Implements IAIProvider interface
  */
@@ -41,7 +41,7 @@ class RateLimiter {
     }
 
     getWaitTime(): number {
-        if (this.canMakeRequest()) return 0;
+        if (this.canMakeRequest()) { return 0; }
         const oldestRequest = Math.min(...this.requests);
         return this.timeWindow - (Date.now() - oldestRequest);
     }
@@ -91,7 +91,7 @@ export class ClaudeAIProvider implements IAIProvider {
 
             Logger.info('✅ Claude AI Provider initialized successfully', {
                 model: this.config.model,
-                initTime: this.initTime + 'ms'
+                initTime: `${this.initTime}ms`
             });
         } catch (error) {
             this.lastError = error instanceof Error ? error.message : 'Unknown error';
@@ -298,7 +298,7 @@ Be conservative and prioritize capital preservation. Only recommend BUY/SELL wit
                 timestamp: Date.now(),
                 provider: 'claude',
                 riskLevel: 'HIGH',
-                note: 'Parsing error: ' + (error instanceof Error ? error.message : 'Unknown error')
+                note: `Parsing error: ${error instanceof Error ? error.message : 'Unknown error'}`
             };
         }
     }

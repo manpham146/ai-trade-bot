@@ -38,8 +38,8 @@ module.exports = {
     rangeStart: 0,
     rangeEnd: Infinity,
     
-    // Parser
-    parser: undefined,
+    // Parser tự động detect
+    // parser: undefined, // Commented out to let Prettier auto-detect
     
     // File path
     filepath: undefined,

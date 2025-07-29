@@ -97,8 +97,8 @@ class MarketAnalyzer {
 
             const ohlcv = marketData.ohlcv;
             const closes = ohlcv.map(candle => candle[4]); // Giá đóng cửa
-            const highs = ohlcv.map(candle => candle[2]);   // Giá cao nhất
-            const lows = ohlcv.map(candle => candle[3]);    // Giá thấp nhất
+            const highs = ohlcv.map(candle => candle[2]); // Giá cao nhất
+            const lows = ohlcv.map(candle => candle[3]); // Giá thấp nhất
             const volumes = ohlcv.map(candle => candle[5]); // Khối lượng
 
             // Tính toán các chỉ báo kỹ thuật
@@ -127,7 +127,12 @@ class MarketAnalyzer {
             const volumeAnalysis = this.analyzeVolume(volumes, closes);
 
             // Kiểm tra điều kiện vào lệnh
-            const entryCondition = this.checkEntryCondition(marketData.price, ema20, rsi, dailyTrend);
+            const entryCondition = this.checkEntryCondition(
+                marketData.price,
+                ema20,
+                rsi,
+                dailyTrend
+            );
 
             // Tổng hợp tín hiệu
             const signals = this.generateSignals({
@@ -177,7 +182,6 @@ class MarketAnalyzer {
             });
 
             return analysis;
-
         } catch (error) {
             Logger.error('❌ Lỗi phân tích thị trường:', error as Error);
             throw error;
@@ -218,9 +222,11 @@ class MarketAnalyzer {
             avgLoss = (avgLoss * (period - 1) + loss) / period;
         }
 
-        if (avgLoss === 0) return 100;
+        if (avgLoss === 0) {
+            return 100;
+        }
         const rs = avgGain / avgLoss;
-        return 100 - (100 / (1 + rs));
+        return 100 - 100 / (1 + rs);
     }
 
     /**
@@ -265,7 +271,9 @@ class MarketAnalyzer {
      * Tính toán EMA (Exponential Moving Average)
      */
     private calculateEMA(prices: number[], period: number): number {
-        if (prices.length === 0) return 0;
+        if (prices.length === 0) {
+            return 0;
+        }
         if (prices.length < period) {
             return this.calculateSMA(prices, prices.length);
         }
@@ -274,7 +282,7 @@ class MarketAnalyzer {
         let ema = this.calculateSMA(prices.slice(0, period), period);
 
         for (let i = period; i < prices.length; i++) {
-            ema = (prices[i] * multiplier) + (ema * (1 - multiplier));
+            ema = prices[i] * multiplier + ema * (1 - multiplier);
         }
 
         return ema;
@@ -292,7 +300,7 @@ class MarketAnalyzer {
         let ema = this.calculateSMA(prices.slice(0, period), period);
 
         for (let i = period; i <= index; i++) {
-            ema = (prices[i] * multiplier) + (ema * (1 - multiplier));
+            ema = prices[i] * multiplier + ema * (1 - multiplier);
         }
 
         return ema;
@@ -301,28 +309,38 @@ class MarketAnalyzer {
     /**
      * Tính toán Bollinger Bands
      */
-    private calculateBollingerBands(prices: number[], period: number = 20, stdDev: number = 2): BollingerBands {
+    private calculateBollingerBands(
+        prices: number[],
+        period: number = 20,
+        stdDev: number = 2
+    ): BollingerBands {
         const sma = this.calculateSMA(prices, period);
         const recentPrices = prices.slice(-period);
 
         // Tính độ lệch chuẩn
-        const variance = recentPrices.reduce((acc, price) => {
-            return acc + Math.pow(price - sma, 2);
-        }, 0) / period;
+        const variance =
+            recentPrices.reduce((acc, price) => {
+                return acc + Math.pow(price - sma, 2);
+            }, 0) / period;
 
         const standardDeviation = Math.sqrt(variance);
 
         return {
-            upper: sma + (standardDeviation * stdDev),
+            upper: sma + standardDeviation * stdDev,
             middle: sma,
-            lower: sma - (standardDeviation * stdDev)
+            lower: sma - standardDeviation * stdDev
         };
     }
 
     /**
      * Tính toán Stochastic Oscillator
      */
-    private calculateStochastic(highs: number[], lows: number[], closes: number[], period: number = 14): StochasticResult {
+    private calculateStochastic(
+        highs: number[],
+        lows: number[],
+        closes: number[],
+        period: number = 14
+    ): StochasticResult {
         if (closes.length < period) {
             return { k: 50, d: 50 };
         }
@@ -355,7 +373,11 @@ class MarketAnalyzer {
     /**
      * Phân tích xu hướng D1 dựa trên MA50 và MA200
      */
-    private analyzeDailyTrend(currentPrice: number, ma50: number, ma200: number): 'UPTREND' | 'DOWNTREND' | 'SIDEWAYS' {
+    private analyzeDailyTrend(
+        currentPrice: number,
+        ma50: number,
+        ma200: number
+    ): 'UPTREND' | 'DOWNTREND' | 'SIDEWAYS' {
         if (currentPrice > ma50 && ma50 > ma200) {
             return 'UPTREND';
         } else if (currentPrice < ma50 && ma50 < ma200) {
@@ -368,7 +390,12 @@ class MarketAnalyzer {
     /**
      * Kiểm tra điều kiện vào lệnh theo chiến lược mới
      */
-    private checkEntryCondition(currentPrice: number, ema20: number, rsi: number, dailyTrend: 'UPTREND' | 'DOWNTREND' | 'SIDEWAYS'): boolean {
+    private checkEntryCondition(
+        currentPrice: number,
+        ema20: number,
+        rsi: number,
+        dailyTrend: 'UPTREND' | 'DOWNTREND' | 'SIDEWAYS'
+    ): boolean {
         // Chỉ giao dịch khi có xu hướng rõ ràng trên D1
         if (dailyTrend === 'SIDEWAYS') {
             return false;
@@ -439,7 +466,10 @@ class MarketAnalyzer {
         const avgVolume = this.calculateSMA(volumes, Math.min(20, volumes.length));
 
         const recentVolumes = volumes.slice(-5);
-        const volumeTrend = recentVolumes[recentVolumes.length - 1] > recentVolumes[0] ? 'INCREASING' : 'DECREASING';
+        const volumeTrend =
+            recentVolumes[recentVolumes.length - 1] > recentVolumes[0]
+                ? 'INCREASING'
+                : 'DECREASING';
 
         let strength: 'HIGH' | 'MEDIUM' | 'LOW';
         if (currentVolume > avgVolume * 1.5) {
@@ -461,7 +491,11 @@ class MarketAnalyzer {
     /**
      * Tổng hợp tín hiệu theo chiến lược mới: Giao dịch thuận xu hướng với xác nhận rõ ràng
      */
-    private generateSignals(data: SignalData): { signal: 'BUY' | 'SELL' | 'HOLD'; confidence: number; reasoning: string[]; } {
+    private generateSignals(data: SignalData): {
+        signal: 'BUY' | 'SELL' | 'HOLD';
+        confidence: number;
+        reasoning: string[];
+    } {
         const reasoning: string[] = [];
         let signal: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
         let confidence = 0;
@@ -535,13 +569,17 @@ class MarketAnalyzer {
         const sellRatio = sellSignals / totalSignals;
 
         if (data.dailyTrend === 'UPTREND') {
-            reasoning.push(`✅ Xu hướng tăng D1: Giá (${data.currentPrice.toFixed(2)}) > MA50 (${data.ma50_d1.toFixed(2)}) > MA200 (${data.ma200_d1.toFixed(2)})`);
+            reasoning.push(
+                `✅ Xu hướng tăng D1: Giá (${data.currentPrice.toFixed(2)}) > MA50 (${data.ma50_d1.toFixed(2)}) > MA200 (${data.ma200_d1.toFixed(2)})`
+            );
 
             // Điều kiện LONG: buyRatio >= 0.6 + pullback về EMA20 + RSI < 50
             if (buyRatio >= 0.6 && nearEMA20 && data.rsi < 50) {
                 signal = 'BUY';
                 confidence = buyRatio * 0.8;
-                reasoning.push(`🎯 Tín hiệu LONG: Pullback về EMA20 (${data.ema20.toFixed(2)}) + Tỷ lệ buy signals: ${(buyRatio * 100).toFixed(1)}%`);
+                reasoning.push(
+                    `🎯 Tín hiệu LONG: Pullback về EMA20 (${data.ema20.toFixed(2)}) + Tỷ lệ buy signals: ${(buyRatio * 100).toFixed(1)}%`
+                );
 
                 // Tăng confidence nếu có volume cao
                 if (data.volumeAnalysis.strength === 'HIGH') {
@@ -549,17 +587,22 @@ class MarketAnalyzer {
                     reasoning.push('📊 Khối lượng cao xác nhận');
                 }
             } else {
-                reasoning.push(`⏳ Chờ điều kiện LONG: Cần pullback về EMA20 + tỷ lệ buy signals >= 60% (hiện tại: ${(buyRatio * 100).toFixed(1)}%)`);
+                reasoning.push(
+                    `⏳ Chờ điều kiện LONG: Cần pullback về EMA20 + tỷ lệ buy signals >= 60% (hiện tại: ${(buyRatio * 100).toFixed(1)}%)`
+                );
             }
-
         } else if (data.dailyTrend === 'DOWNTREND') {
-            reasoning.push(`✅ Xu hướng giảm D1: Giá (${data.currentPrice.toFixed(2)}) < MA50 (${data.ma50_d1.toFixed(2)}) < MA200 (${data.ma200_d1.toFixed(2)})`);
+            reasoning.push(
+                `✅ Xu hướng giảm D1: Giá (${data.currentPrice.toFixed(2)}) < MA50 (${data.ma50_d1.toFixed(2)}) < MA200 (${data.ma200_d1.toFixed(2)})`
+            );
 
             // Điều kiện SHORT: sellRatio >= 0.6 + hồi về EMA20 + RSI > 50
             if (sellRatio >= 0.6 && nearEMA20 && data.rsi > 50) {
                 signal = 'SELL';
                 confidence = sellRatio * 0.8;
-                reasoning.push(`🎯 Tín hiệu SHORT: Hồi về EMA20 (${data.ema20.toFixed(2)}) + Tỷ lệ sell signals: ${(sellRatio * 100).toFixed(1)}%`);
+                reasoning.push(
+                    `🎯 Tín hiệu SHORT: Hồi về EMA20 (${data.ema20.toFixed(2)}) + Tỷ lệ sell signals: ${(sellRatio * 100).toFixed(1)}%`
+                );
 
                 // Tăng confidence nếu có volume cao
                 if (data.volumeAnalysis.strength === 'HIGH') {
@@ -567,7 +610,9 @@ class MarketAnalyzer {
                     reasoning.push('📊 Khối lượng cao xác nhận');
                 }
             } else {
-                reasoning.push(`⏳ Chờ điều kiện SHORT: Cần hồi về EMA20 + tỷ lệ sell signals >= 60% (hiện tại: ${(sellRatio * 100).toFixed(1)}%)`);
+                reasoning.push(
+                    `⏳ Chờ điều kiện SHORT: Cần hồi về EMA20 + tỷ lệ sell signals >= 60% (hiện tại: ${(sellRatio * 100).toFixed(1)}%)`
+                );
             }
         }
 

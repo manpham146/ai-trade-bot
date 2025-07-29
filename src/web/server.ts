@@ -233,10 +233,16 @@ class WebDashboard {
             if (global.botInstance) {
                 global.botInstance.isRunning = false;
                 Logger.warn('🚨 EMERGENCY STOP - Bot đã được dừng khẩn cấp!');
-                const response: ApiResponse = { success: true, message: 'Bot đã được dừng khẩn cấp' };
+                const response: ApiResponse = {
+                    success: true,
+                    message: 'Bot đã được dừng khẩn cấp'
+                };
                 res.json(response);
             } else {
-                const response: ApiResponse = { success: false, message: 'Không tìm thấy bot instance' };
+                const response: ApiResponse = {
+                    success: false,
+                    message: 'Không tìm thấy bot instance'
+                };
                 res.json(response);
             }
         } catch (error) {
@@ -276,7 +282,7 @@ class WebDashboard {
 
             // Create backup before saving
             try {
-                const backupPath = fullPath + '.backup.' + Date.now();
+                const backupPath = `${fullPath}.backup.${Date.now()}`;
                 const originalContent = await fsPromises.readFile(fullPath, 'utf-8');
                 await fsPromises.writeFile(backupPath, originalContent);
             } catch (error) {
@@ -286,7 +292,10 @@ class WebDashboard {
             await fsPromises.writeFile(fullPath, content, 'utf-8');
             res.json({ success: true, message: 'File saved successfully' });
         } catch (error) {
-            res.status(500).json({ error: 'Failed to save file', message: (error as Error).message });
+            res.status(500).json({
+                error: 'Failed to save file',
+                message: (error as Error).message
+            });
         }
     }
 
@@ -321,7 +330,10 @@ class WebDashboard {
 
             res.json({ files: fileList });
         } catch (error) {
-            res.status(500).json({ error: 'Failed to get file list', message: (error as Error).message });
+            res.status(500).json({
+                error: 'Failed to get file list',
+                message: (error as Error).message
+            });
         }
     }
 

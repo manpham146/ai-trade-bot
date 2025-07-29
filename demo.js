@@ -1,6 +1,6 @@
 require('dotenv').config();
-const TradingBot = require('./src/bot/TradingBot');
-const Logger = require('./src/utils/Logger');
+const TradingBot = require('./dist/bot/TradingBot').default;
+const Logger = require('./dist/utils/Logger').default;
 
 /**
  * Demo Script - Chạy bot ở chế độ demo để test

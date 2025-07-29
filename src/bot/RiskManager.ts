@@ -124,17 +124,28 @@ class RiskManager {
      * Tính toán position size với rủi ro tối đa 0.5% mỗi lệnh
      */
     calculateSafePositionSize(balance: number, entryPrice: number, stopLoss: number): number {
+        const useFullBalance = process.env.USE_FULL_BALANCE === 'true';
+        
+        if (useFullBalance) {
+            // Sử dụng toàn bộ tài sản (100%)
+            Logger.info(`💰 Sử dụng toàn bộ tài sản: $${balance.toFixed(2)}`);
+            return balance; // Trả về toàn bộ số dư
+        }
+        
+        // Logic cũ: Tính toán dựa trên rủi ro
         const maxRiskAmount = balance * 0.005; // 0.5% của tài khoản
         const riskPerUnit = Math.abs(entryPrice - stopLoss);
-        
-        if (riskPerUnit === 0) return 0;
-        
+
+        if (riskPerUnit === 0) {
+            return 0;
+        }
+
         const maxUnits = maxRiskAmount / riskPerUnit;
         const maxPositionValue = maxUnits * entryPrice;
-        
+
         // Giới hạn position không quá 10% tài khoản
         const maxAllowedValue = balance * 0.1;
-        
+
         return Math.min(maxPositionValue, maxAllowedValue);
     }
 
@@ -196,7 +207,6 @@ class RiskManager {
                 stopLoss: this.calculateSwingBasedStopLoss(marketData),
                 takeProfit: this.calculateConservativeTakeProfit(marketData)
             };
-
         } catch (error) {
             Logger.error('❌ Lỗi đánh giá rủi ro:', (error as Error).message);
             return {
@@ -239,12 +249,27 @@ class RiskManager {
      * Tính toán position size theo chiến lược mới
      */
     private calculateNewPositionSize(riskScore: number, marketData: any): number {
+        const useFullBalance = process.env.USE_FULL_BALANCE === 'true';
         const baseSize = this.maxPositionSize;
+
+        if (riskScore > 0.7) {
+            return 0;
+        } // Không giao dịch
         
-        if (riskScore > 0.7) return 0; // Không giao dịch
-        if (riskScore > 0.5) return baseSize * 0.5; // Giảm 50%
-        if (riskScore > 0.3) return baseSize * 0.8; // Giảm 20%
+        if (useFullBalance) {
+            // Sử dụng toàn bộ tài sản bất kể risk score (trừ khi rủi ro quá cao)
+            Logger.info(`🎯 Sử dụng toàn bộ tài sản - Risk Score: ${riskScore.toFixed(2)}`);
+            return 100; // 100% tài sản
+        }
         
+        // Logic cũ dựa trên risk score
+        if (riskScore > 0.5) {
+            return baseSize * 0.5;
+        } // Giảm 50%
+        if (riskScore > 0.3) {
+            return baseSize * 0.8;
+        } // Giảm 20%
+
         return baseSize; // Position size đầy đủ
     }
 
@@ -305,13 +330,16 @@ class RiskManager {
             let riskScore = 0;
             let reason = '';
 
-            if (atr > 0.05) { // ATR > 5%
+            if (atr > 0.05) {
+                // ATR > 5%
                 riskScore = 0.8;
                 reason = 'Volatility rất cao';
-            } else if (atr > 0.03) { // ATR > 3%
+            } else if (atr > 0.03) {
+                // ATR > 3%
                 riskScore = 0.6;
                 reason = 'Volatility cao';
-            } else if (atr > 0.02) { // ATR > 2%
+            } else if (atr > 0.02) {
+                // ATR > 2%
                 riskScore = 0.4;
                 reason = 'Volatility trung bình';
             } else {
@@ -326,7 +354,6 @@ class RiskManager {
                 avgVolatility: avgVolatility,
                 reason: reason
             };
-
         } catch (error) {
             Logger.error('❌ Lỗi đánh giá volatility risk:', (error as Error).message);
             return { score: 0.5, reason: 'Lỗi tính toán volatility' };
@@ -394,9 +421,9 @@ class RiskManager {
             return {
                 score: Math.min(riskScore, 1),
                 factors: riskFactors,
-                reason: riskFactors.length > 0 ? riskFactors.join(', ') : 'Tín hiệu kỹ thuật ổn định'
+                reason:
+                    riskFactors.length > 0 ? riskFactors.join(', ') : 'Tín hiệu kỹ thuật ổn định'
             };
-
         } catch (error) {
             Logger.error('❌ Lỗi đánh giá technical risk:', (error as Error).message);
             return { score: 0.5, reason: 'Lỗi phân tích kỹ thuật' };
@@ -439,7 +466,6 @@ class RiskManager {
                 signal: aiPrediction.signal,
                 reason: reason
             };
-
         } catch (error) {
             Logger.error('❌ Lỗi đánh giá AI confidence risk:', (error as Error).message);
             return { score: 0.7, reason: 'Lỗi đánh giá AI' };
@@ -449,7 +475,10 @@ class RiskManager {
     /**
      * Đánh giá rủi ro vị thế hiện tại
      */
-    private assessPositionRisk(currentPosition: Position | undefined, marketData: MarketData): RiskFactor {
+    private assessPositionRisk(
+        currentPosition: Position | undefined,
+        marketData: MarketData
+    ): RiskFactor {
         try {
             if (!currentPosition) {
                 return { score: 0, reason: 'Không có vị thế mở' };
@@ -472,10 +501,12 @@ class RiskManager {
             }
 
             // Đánh giá theo P&L
-            if (unrealizedPnL < -0.05) { // Lỗ > 5%
+            if (unrealizedPnL < -0.05) {
+                // Lỗ > 5%
                 riskScore += 0.5;
                 reason += 'Lỗ lớn; ';
-            } else if (unrealizedPnL < -0.02) { // Lỗ > 2%
+            } else if (unrealizedPnL < -0.02) {
+                // Lỗ > 2%
                 riskScore += 0.3;
                 reason += 'Đang lỗ; ';
             }
@@ -497,7 +528,6 @@ class RiskManager {
                 holdingHours: holdingHours,
                 reason: reason || 'Vị thế ổn định'
             };
-
         } catch (error) {
             Logger.error('❌ Lỗi đánh giá position risk:', (error as Error).message);
             return { score: 0.5, reason: 'Lỗi đánh giá vị thế' };
@@ -540,7 +570,6 @@ class RiskManager {
                 maxDaily: this.maxTradesPerDay,
                 reason: reason
             };
-
         } catch (error) {
             Logger.error('❌ Lỗi đánh giá frequency risk:', (error as Error).message);
             return { score: 0.3, reason: 'Lỗi đánh giá tần suất' };
@@ -582,8 +611,12 @@ class RiskManager {
      * Xác định mức độ rủi ro
      */
     private getRiskLevel(score: number): 'LOW' | 'MEDIUM' | 'HIGH' {
-        if (score >= 0.7) { return 'HIGH'; }
-        if (score >= 0.4) { return 'MEDIUM'; }
+        if (score >= 0.7) {
+            return 'HIGH';
+        }
+        if (score >= 0.4) {
+            return 'MEDIUM';
+        }
         return 'LOW';
     }
 
@@ -615,7 +648,16 @@ class RiskManager {
      * Tính toán kích thước vị thế dựa trên rủi ro
      */
     private calculatePositionSize(riskScore: number, _marketData: MarketData): number {
+        const useFullBalance = process.env.USE_FULL_BALANCE === 'true';
         const baseAmount = parseFloat(process.env.TRADE_AMOUNT || '10');
+        
+        if (useFullBalance) {
+            // Sử dụng toàn bộ tài sản (100%)
+            Logger.info(`💰 Position Size: 100% tài sản - Risk Score: ${riskScore.toFixed(2)}`);
+            return 100; // 100% tài sản
+        }
+        
+        // Logic cũ dựa trên risk score
         let multiplier = 1;
 
         if (riskScore >= 0.7) {

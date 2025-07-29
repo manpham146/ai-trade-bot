@@ -1,11 +1,18 @@
 /**
  * 🤖 AI Manager
- * 
+ *
  * Quản lý External AI providers (Gemini, Claude, OpenAI)
  * Hỗ trợ fallback, load balancing, và monitoring
  */
 
-import { IAIProvider, AIProviderType, AIManagerConfig, MarketData, AIPrediction, AIProviderInfo } from './interfaces/IAIProvider';
+import {
+    IAIProvider,
+    AIProviderType,
+    AIManagerConfig,
+    MarketData,
+    AIPrediction,
+    AIProviderInfo
+} from './interfaces/IAIProvider';
 import { ExternalAIProvider } from './providers/ExternalAIProvider';
 import Logger from '../utils/Logger';
 
@@ -45,7 +52,10 @@ export class AIManager {
                 try {
                     await this.initializeProvider(this.config.fallbackProvider);
                 } catch (error) {
-                    Logger.warn(`Failed to initialize fallback provider ${this.config.fallbackProvider}:`, error as any);
+                    Logger.warn(
+                        `Failed to initialize fallback provider ${this.config.fallbackProvider}:`,
+                        error as any
+                    );
                 }
             }
 
@@ -89,7 +99,9 @@ export class AIManager {
                 return new ExternalAIProvider(this.config.externalConfig);
 
             default:
-                throw new Error(`Unsupported provider type: ${providerType}. Only EXTERNAL provider is supported.`);
+                throw new Error(
+                    `Unsupported provider type: ${providerType}. Only EXTERNAL provider is supported.`
+                );
         }
     }
 
@@ -264,8 +276,8 @@ export class AIManager {
     /**
      * Lấy thông tin tất cả providers
      */
-    getAllProvidersInfo(): { [key: string]: AIProviderInfo; } {
-        const info: { [key: string]: AIProviderInfo; } = {};
+    getAllProvidersInfo(): { [key: string]: AIProviderInfo } {
+        const info: { [key: string]: AIProviderInfo } = {};
 
         for (const [providerType, provider] of this.providers) {
             info[providerType] = provider.getInfo();
@@ -283,7 +295,10 @@ export class AIManager {
             requestCount: this.requestCount,
             errorCount: this.errorCount,
             dailyCost: this.dailyCost,
-            successRate: this.requestCount > 0 ? ((this.requestCount - this.errorCount) / this.requestCount * 100).toFixed(2) + '%' : '0%',
+            successRate:
+                this.requestCount > 0
+                    ? `${(((this.requestCount - this.errorCount) / this.requestCount) * 100).toFixed(2)}%`
+                    : '0%',
             availableProviders: Array.from(this.providers.keys()),
             readyProviders: Array.from(this.providers.entries())
                 .filter(([, provider]) => provider.isReady())

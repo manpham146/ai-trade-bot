@@ -22,12 +22,12 @@ class StrategyTest {
         // Dữ liệu giá mẫu cho test
         const prices = [];
         let basePrice = 45000;
-        
+
         // Tạo 200 nến giá (cho MA200)
         for (let i = 0; i < 200; i++) {
             const variation = (Math.random() - 0.5) * 1000; // Biến động ±500
             basePrice += variation;
-            
+
             prices.push({
                 timestamp: Date.now() - (200 - i) * 3600000, // 1h mỗi nến
                 open: basePrice - Math.random() * 100,
@@ -37,7 +37,7 @@ class StrategyTest {
                 volume: 1000 + Math.random() * 500
             });
         }
-        
+
         return prices;
     }
 
@@ -46,7 +46,7 @@ class StrategyTest {
      */
     async testDailyTrendAnalysis(): Promise<any> {
         Logger.info('🧪 Test phân tích xu hướng D1...');
-        
+
         const testData = this.generateTestData();
         const marketData = {
             symbol: 'BTC/USDT',
@@ -56,7 +56,7 @@ class StrategyTest {
             ohlcv: testData.map(d => [d.timestamp, d.open, d.high, d.low, d.close, d.volume])
         };
         const analysis = await this.marketAnalyzer.analyze(marketData);
-        
+
         Logger.info('📊 Kết quả phân tích:');
         Logger.info(`- Xu hướng D1: ${(analysis as any).dailyTrend}`);
         Logger.info(`- MA50 D1: ${(analysis as any).ma50_d1?.toFixed(2)}`);
@@ -65,7 +65,7 @@ class StrategyTest {
         Logger.info(`- Điều kiện vào lệnh: ${(analysis as any).entryCondition}`);
         Logger.info(`- Tín hiệu: ${analysis.signal}`);
         Logger.info(`- Độ tin cậy: ${(analysis.confidence * 100).toFixed(1)}%`);
-        
+
         return analysis;
     }
 
@@ -74,30 +74,30 @@ class StrategyTest {
      */
     async testRiskManagement() {
         Logger.info('🛡️ Test quản lý rủi ro...');
-        
+
         const balance = 10000; // $10,000
         const entryPrice = 45000;
         const stopLoss = 44550; // 1% stop loss
-        
+
         // Test position size calculation
         const safeSize = this.riskManager.calculateSafePositionSize(balance, entryPrice, stopLoss);
         const riskAmount = Math.abs(entryPrice - stopLoss) * (safeSize / entryPrice);
         const riskPercent = (riskAmount / balance) * 100;
-        
+
         Logger.info(`💰 Tài khoản: $${balance.toLocaleString()}`);
         Logger.info(`📈 Giá vào lệnh: $${entryPrice.toLocaleString()}`);
         Logger.info(`🛑 Stop Loss: $${stopLoss.toLocaleString()}`);
         Logger.info(`📊 Position size an toàn: $${safeSize.toFixed(2)}`);
         Logger.info(`⚠️ Rủi ro thực tế: ${riskPercent.toFixed(3)}% (mục tiêu ≤ 0.5%)`);
-        
+
         // Test weekly loss limit
         const weeklyProfit = -120; // Lỗ $120
         const withinLimit = this.riskManager.checkWeeklyLossLimit(balance, weeklyProfit);
         const weeklyLossPercent = (weeklyProfit / balance) * 100;
-        
+
         Logger.info(`📅 Lỗ tuần: $${Math.abs(weeklyProfit)} (${weeklyLossPercent.toFixed(2)}%)`);
         Logger.info(`✅ Trong giới hạn 1.5%: ${withinLimit ? 'CÓ' : 'KHÔNG'}`);
-        
+
         return {
             safeSize,
             riskPercent,
@@ -111,26 +111,27 @@ class StrategyTest {
      */
     async testAIIntegration(): Promise<any> {
         Logger.info('🤖 Test tích hợp AI...');
-        
+
         // Mô phỏng dữ liệu AI
         const aiPrediction = {
             direction: 'UP' as const,
             confidence: 0.75,
             reasoning: 'Xu hướng tăng mạnh, RSI oversold, volume tăng'
         };
-        
+
         const technicalSignal = await this.testDailyTrendAnalysis();
-        
+
         // Logic xác nhận AI
-        const aiConfirms = aiPrediction.confidence > 0.6 && 
-                          aiPrediction.direction === 'UP' && 
-                          technicalSignal.signal === 'BUY';
-        
+        const aiConfirms =
+            aiPrediction.confidence > 0.6 &&
+            aiPrediction.direction === 'UP' &&
+            technicalSignal.signal === 'BUY';
+
         Logger.info(`🎯 AI dự đoán: ${aiPrediction.direction}`);
         Logger.info(`🔍 Độ tin cậy AI: ${(aiPrediction.confidence * 100).toFixed(1)}%`);
         Logger.info(`📊 Tín hiệu kỹ thuật: ${technicalSignal.signal}`);
         Logger.info(`✅ AI xác nhận: ${aiConfirms ? 'CÓ' : 'KHÔNG'}`);
-        
+
         return {
             aiPrediction,
             technicalSignal,
@@ -143,32 +144,32 @@ class StrategyTest {
      */
     async runFullStrategyTest() {
         Logger.info('🚀 Bắt đầu test tổng hợp chiến lược mới...');
-        Logger.info('=' .repeat(50));
-        
+        Logger.info('='.repeat(50));
+
         try {
             // 1. Test phân tích kỹ thuật
             const technicalResult = await this.testDailyTrendAnalysis();
             Logger.info('');
-            
+
             // 2. Test quản lý rủi ro
             const riskResult = await this.testRiskManagement();
             Logger.info('');
-            
+
             // 3. Test tích hợp AI
             const aiResult = await this.testAIIntegration();
             Logger.info('');
-            
+
             // 4. Kết luận
             Logger.info('📋 KẾT LUẬN TEST:');
-            Logger.info('=' .repeat(30));
-            
-            const canTrade = 
+            Logger.info('='.repeat(30));
+
+            const canTrade =
                 (technicalResult as any).dailyTrend !== 'SIDEWAYS' &&
                 (technicalResult as any).entryCondition &&
                 riskResult.riskPercent <= 0.5 &&
                 riskResult.withinLimit &&
                 aiResult.aiConfirms;
-            
+
             if (canTrade) {
                 Logger.info('✅ CHIẾN LƯỢC SẴN SÀNG GIAO DỊCH');
                 Logger.info('🎯 Tất cả điều kiện đều thỏa mãn');
@@ -176,7 +177,7 @@ class StrategyTest {
             } else {
                 Logger.info('⚠️ CHƯA ĐỦ ĐIỀU KIỆN GIAO DỊCH');
                 Logger.info('🔍 Cần kiểm tra lại các điều kiện:');
-                
+
                 if ((technicalResult as any).dailyTrend === 'SIDEWAYS') {
                     Logger.info('  - Thị trường đang sideway');
                 }
@@ -193,10 +194,9 @@ class StrategyTest {
                     Logger.info('  - AI chưa xác nhận tín hiệu');
                 }
             }
-            
-            Logger.info('=' .repeat(50));
+
+            Logger.info('='.repeat(50));
             Logger.info('✨ Hoàn thành test chiến lược!');
-            
         } catch (error) {
             Logger.error('❌ Lỗi trong quá trình test:', (error as Error).message);
         }

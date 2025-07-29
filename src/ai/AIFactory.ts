@@ -1,11 +1,18 @@
 /**
  * 🤖 AI Factory
- * 
+ *
  * Factory pattern để tạo và quản lý AI providers
  * Hỗ trợ dynamic loading và configuration
  */
 
-import { IAIProvider, AIProviderType, AIProviderConfig, ExternalAIConfig, AIManagerConfig, ExternalAIService } from './interfaces/IAIProvider';
+import {
+    IAIProvider,
+    AIProviderType,
+    AIProviderConfig,
+    ExternalAIConfig,
+    AIManagerConfig,
+    ExternalAIService
+} from './interfaces/IAIProvider';
 import AIManager from './AIManager';
 import Logger from '../utils/Logger';
 
@@ -13,7 +20,7 @@ export class AIFactory {
     private static instance: AIFactory;
     private providers: Map<string, IAIProvider> = new Map();
 
-    private constructor() { }
+    private constructor() {}
 
     /**
      * Singleton pattern
@@ -28,7 +35,10 @@ export class AIFactory {
     /**
      * Tạo AI Provider dựa trên type
      */
-    async createProvider(type: AIProviderType, config: AIProviderConfig = {}): Promise<IAIProvider> {
+    async createProvider(
+        type: AIProviderType,
+        config: AIProviderConfig = {}
+    ): Promise<IAIProvider> {
         try {
             Logger.info(`Creating AI Provider: ${type}`);
 
@@ -44,7 +54,9 @@ export class AIFactory {
                     break;
 
                 default:
-                    throw new Error(`Unsupported AI provider type: ${type}. Only EXTERNAL provider is supported.`);
+                    throw new Error(
+                        `Unsupported AI provider type: ${type}. Only EXTERNAL provider is supported.`
+                    );
             }
 
             // Cache provider
@@ -102,13 +114,17 @@ export class AIFactory {
     async createAIManagerFromEnv(): Promise<AIManager> {
         try {
             // Đọc cấu hình từ environment variables
-            const primaryProvider = (process.env.AI_PRIMARY_PROVIDER as AIProviderType) || AIProviderType.EXTERNAL;
-            const fallbackProvider = process.env.AI_FALLBACK_PROVIDER as AIProviderType || AIProviderType.EXTERNAL;
+            const primaryProvider =
+                (process.env.AI_PRIMARY_PROVIDER as AIProviderType) || AIProviderType.EXTERNAL;
+            const fallbackProvider =
+                (process.env.AI_FALLBACK_PROVIDER as AIProviderType) || AIProviderType.EXTERNAL;
 
             const autoSwitchOnError = process.env.AI_AUTO_SWITCH !== 'false';
             const maxRetries = parseInt(process.env.AI_MAX_RETRIES || '3');
             const healthCheckInterval = parseInt(process.env.AI_HEALTH_CHECK_INTERVAL || '300000');
-            const costThreshold = process.env.AI_COST_THRESHOLD ? parseFloat(process.env.AI_COST_THRESHOLD) : undefined;
+            const costThreshold = process.env.AI_COST_THRESHOLD
+                ? parseFloat(process.env.AI_COST_THRESHOLD)
+                : undefined;
 
             // No internal AI config needed anymore
 
@@ -129,7 +145,11 @@ export class AIFactory {
 
             const externalConfig: ExternalAIConfig = {
                 service: externalService,
-                fallbackServices: [ExternalAIService.GEMINI, ExternalAIService.CLAUDE, ExternalAIService.OPENAI].filter(s => s !== externalService)
+                fallbackServices: [
+                    ExternalAIService.GEMINI,
+                    ExternalAIService.CLAUDE,
+                    ExternalAIService.OPENAI
+                ].filter(s => s !== externalService)
             };
 
             const config = {
@@ -174,7 +194,9 @@ export class AIFactory {
                     return true;
 
                 default:
-                    Logger.warn(`Unknown provider type: ${type}. Only EXTERNAL provider is supported.`);
+                    Logger.warn(
+                        `Unknown provider type: ${type}. Only EXTERNAL provider is supported.`
+                    );
                     return false;
             }
         } catch (error) {
@@ -190,7 +212,8 @@ export class AIFactory {
         const available: AIProviderType[] = [];
 
         // Kiểm tra API keys cho external AI
-        const hasExternalAPI = process.env.GEMINI_API_KEY || process.env.CLAUDE_API_KEY || process.env.OPENAI_API_KEY;
+        const hasExternalAPI =
+            process.env.GEMINI_API_KEY || process.env.CLAUDE_API_KEY || process.env.OPENAI_API_KEY;
         if (hasExternalAPI) {
             available.push(AIProviderType.EXTERNAL);
         }
@@ -201,7 +224,9 @@ export class AIFactory {
     /**
      * Lấy provider recommendations dựa trên use case
      */
-    getProviderRecommendations(useCase: 'cost-effective' | 'high-accuracy' | 'fast-response' | 'offline'): {
+    getProviderRecommendations(
+        useCase: 'cost-effective' | 'high-accuracy' | 'fast-response' | 'offline'
+    ): {
         primary: AIProviderType;
         fallback?: AIProviderType;
         reasoning: string;
@@ -222,7 +247,9 @@ export class AIFactory {
                 };
 
             case 'offline':
-                throw new Error('Offline mode is not supported. Only external AI providers are available.');
+                throw new Error(
+                    'Offline mode is not supported. Only external AI providers are available.'
+                );
         }
 
         // Default fallback

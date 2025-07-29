@@ -43,7 +43,7 @@ async function main(): Promise<void> {
         Logger.info('✅ Bot đã khởi động thành công!');
 
         // Xử lý tín hiệu thoát
-        process.on('SIGINT', async (): Promise<void> => {
+        process.on('SIGINT', async(): Promise<void> => {
             Logger.info('🛑 Đang dừng bot...');
             await bot.stop();
             process.exit(0);

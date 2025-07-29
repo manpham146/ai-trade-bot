@@ -1,6 +1,6 @@
 /**
  * 🤖 Gemini AI Provider
- * 
+ *
  * Wrapper cho GeminiPredictor hiện tại
  * Implements IAIProvider interface
  */
@@ -63,7 +63,7 @@ export class GeminiAIProvider implements IAIProvider {
 
             Logger.info('✅ Gemini AI Provider initialized successfully', {
                 model: this.config.model,
-                initTime: this.initTime + 'ms'
+                initTime: `${this.initTime}ms`
             });
         } catch (error) {
             this.lastError = error instanceof Error ? error.message : 'Unknown error';

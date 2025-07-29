@@ -36,8 +36,8 @@ class Logger {
     static get COLORS(): Colors {
         return {
             ERROR: '\x1b[31m', // Đỏ
-            WARN: '\x1b[33m',  // Vàng
-            INFO: '\x1b[36m',  // Cyan
+            WARN: '\x1b[33m', // Vàng
+            INFO: '\x1b[36m', // Cyan
             DEBUG: '\x1b[37m', // Trắng
             RESET: '\x1b[0m'
         };
@@ -90,8 +90,17 @@ class Logger {
     }
 
     // Specialized logging methods for trading
-    static trade(action: string, symbol: string, price: number, amount: number, data: LogData = null): void {
-        this.info(`📈 ${action.toUpperCase()} ${symbol} - Price: ${price}, Amount: ${amount}`, data);
+    static trade(
+        action: string,
+        symbol: string,
+        price: number,
+        amount: number,
+        data: LogData = null
+    ): void {
+        this.info(
+            `📈 ${action.toUpperCase()} ${symbol} - Price: ${price}, Amount: ${amount}`,
+            data
+        );
     }
 
     static profit(amount: number, percentage: number, symbol: string = 'USDT'): void {
@@ -103,7 +112,10 @@ class Logger {
     }
 
     static aiPrediction(prediction: string, confidence: number, data: LogData = null): void {
-        this.info(`🤖 AI Prediction: ${prediction} (Confidence: ${(confidence * 100).toFixed(1)}%)`, data);
+        this.info(
+            `🤖 AI Prediction: ${prediction} (Confidence: ${(confidence * 100).toFixed(1)}%)`,
+            data
+        );
     }
 }
 

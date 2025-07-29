@@ -180,19 +180,19 @@ class TradingBot {
      */
     async initializeAI(): Promise<void> {
         const aiAdvisorEnabled = process.env.AI_ADVISOR_ENABLED === 'true';
-        
+
         if (!aiAdvisorEnabled) {
             Logger.info('🔇 AI Advisor bị tắt - Bot sẽ chỉ sử dụng phân tích kỹ thuật');
             this.aiManager = null;
             return;
         }
-        
+
         try {
             Logger.info('🤖 Đang khởi tạo AI Manager...');
-            
+
             const factory = AIFactory.getInstance();
             this.aiManager = await factory.createAIManagerFromEnv();
-            
+
             Logger.info('✅ AI Manager đã được khởi tạo thành công!');
         } catch (error) {
             Logger.error('❌ Lỗi khởi tạo AI Manager:', error as Error);
@@ -249,7 +249,7 @@ class TradingBot {
             // 3. Dự đoán AI (kiểm tra cấu hình AI_ADVISOR_ENABLED)
             let aiPrediction: AIPrediction;
             const aiAdvisorEnabled = process.env.AI_ADVISOR_ENABLED === 'true';
-            
+
             if (aiAdvisorEnabled && this.aiManager) {
                 Logger.info('🤖 AI Advisor được bật - Đang lấy dự đoán AI...');
                 aiPrediction = await this.aiManager.predict(marketData);
@@ -275,7 +275,9 @@ class TradingBot {
                 risk: riskAssessment
             });
 
-            Logger.info(`🎯 Quyết định: ${decision.action} (Confidence: ${(decision.confidence * 100).toFixed(1)}%)`);
+            Logger.info(
+                `🎯 Quyết định: ${decision.action} (Confidence: ${(decision.confidence * 100).toFixed(1)}%)`
+            );
             Logger.info(`💭 Lý do: ${decision.reasoning}`);
 
             // 6. Thực hiện giao dịch (nếu được bật)
@@ -287,7 +289,6 @@ class TradingBot {
             await this.saveData();
             this.updateStats();
             this.printStats();
-
         } catch (error) {
             Logger.error('❌ Lỗi trong quá trình phân tích:', error as Error);
         }
@@ -317,13 +318,22 @@ class TradingBot {
     /**
      * Đưa ra quyết định giao dịch theo chiến lược mới: An toàn vốn là ưu tiên số một
      */
-    makeDecision({ technical, ai, risk }: {
+    makeDecision({
+        technical,
+        ai,
+        risk
+    }: {
         technical: TechnicalAnalysis;
         ai: AIPrediction;
         risk: RiskAssessment;
     }): TradingDecision {
         // Kiểm tra giới hạn lỗ tuần bằng RiskManager
-        if (!this.riskManager.checkWeeklyLossLimit(this.stats.currentBalance, this.stats.weeklyProfit)) {
+        if (
+            !this.riskManager.checkWeeklyLossLimit(
+                this.stats.currentBalance,
+                this.stats.weeklyProfit
+            )
+        ) {
             return {
                 action: 'HOLD',
                 confidence: 0,
@@ -360,12 +370,12 @@ class TradingBot {
 
         // Kiểm tra AI Advisor có được bật không
         const aiAdvisorEnabled = process.env.AI_ADVISOR_ENABLED === 'true';
-        
+
         // AI xác nhận tín hiệu kỹ thuật (hoặc chỉ dùng technical nếu AI tắt)
-        const aiConfirms = aiAdvisorEnabled 
-            ? (technical.signal === ai.signal) && (ai.confidence > 0.6)
+        const aiConfirms = aiAdvisorEnabled
+            ? technical.signal === ai.signal && ai.confidence > 0.6
             : technical.confidence > 0.7; // Yêu cầu confidence cao hơn khi không có AI
-        
+
         if (technical.signal === 'BUY' && aiConfirms && !this.currentPosition) {
             // Tính toán position size an toàn với RiskManager
             const stopLossPrice = risk.stopLoss;
@@ -374,28 +384,35 @@ class TradingBot {
                 this.lastMarketData!.price,
                 stopLossPrice
             );
-            const positionSize = Math.min(safePositionSize / this.lastMarketData!.price, risk.positionSizing);
-            
-            const reasoning = aiAdvisorEnabled 
+            const positionSize = Math.min(
+                safePositionSize / this.lastMarketData!.price,
+                risk.positionSizing
+            );
+
+            const reasoning = aiAdvisorEnabled
                 ? `🎯 LONG: Xu hướng tăng D1 + Pullback EMA20 + AI xác nhận (${ai.confidence.toFixed(2)})`
                 : `📈 LONG: Xu hướng tăng D1 + Pullback EMA20 (Technical only - ${technical.confidence.toFixed(2)})`;
-            
+
             return {
                 action: 'BUY',
-                confidence: aiAdvisorEnabled ? Math.min(technical.confidence, ai.confidence) : technical.confidence,
+                confidence: aiAdvisorEnabled
+                    ? Math.min(technical.confidence, ai.confidence)
+                    : technical.confidence,
                 amount: positionSize,
                 reasoning
             };
         }
-        
+
         if (technical.signal === 'SELL' && aiConfirms && this.currentPosition?.side === 'BUY') {
-            const reasoning = aiAdvisorEnabled 
+            const reasoning = aiAdvisorEnabled
                 ? `🎯 Chốt lời/cắt lỗ: AI xác nhận tín hiệu bán (${ai.confidence.toFixed(2)})`
                 : `📉 Chốt lời/cắt lỗ: Tín hiệu kỹ thuật bán (${technical.confidence.toFixed(2)})`;
-                
+
             return {
                 action: 'SELL',
-                confidence: aiAdvisorEnabled ? Math.min(technical.confidence, ai.confidence) : technical.confidence,
+                confidence: aiAdvisorEnabled
+                    ? Math.min(technical.confidence, ai.confidence)
+                    : technical.confidence,
                 reasoning
             };
         }
@@ -405,7 +422,7 @@ class TradingBot {
             const currentPrice = this.lastMarketData!.price;
             const entryPrice = this.currentPosition.entryPrice;
             const profitPercent = ((currentPrice - entryPrice) / entryPrice) * 100;
-            
+
             // Take Profit: 0.3% - 0.5%
             if (profitPercent >= 0.3) {
                 return {
@@ -414,7 +431,7 @@ class TradingBot {
                     reasoning: `💰 Take Profit: Đạt mục tiêu ${profitPercent.toFixed(2)}%`
                 };
             }
-            
+
             // Stop Loss theo swing high/low
             if (this.currentPosition.stopLoss && currentPrice <= this.currentPosition.stopLoss) {
                 return {
@@ -438,7 +455,10 @@ class TradingBot {
     async executeTrade(decision: TradingDecision): Promise<void> {
         try {
             if (decision.action === 'BUY' && !this.currentPosition) {
-                await this.buy(decision.price || this.lastMarketData?.price || 0, decision.amount || 0);
+                await this.buy(
+                    decision.price || this.lastMarketData?.price || 0,
+                    decision.amount || 0
+                );
             } else if (decision.action === 'SELL' && this.currentPosition) {
                 await this.sell(decision.price || this.lastMarketData?.price || 0);
             }
@@ -456,32 +476,45 @@ class TradingBot {
         }
 
         try {
-            Logger.info(`📈 Thực hiện lệnh MUA: ${amount} ${this.config.symbol} @ ${price}`);
-
-            const order = await this.exchange.createMarketBuyOrder(this.config.symbol, amount);
-            const entryPrice = order.price || price;
+            // Kiểm tra nếu sử dụng toàn bộ tài sản
+            const useFullBalance = process.env.USE_FULL_BALANCE === 'true';
+            let finalAmount = amount;
             
+            if (useFullBalance) {
+                // Tính toán amount dựa trên toàn bộ số dư
+                const balance = this.stats.currentBalance;
+                finalAmount = balance / price; // Chuyển đổi USDT thành BTC
+                Logger.info(`💰 Sử dụng toàn bộ tài sản: $${balance.toFixed(2)} → ${finalAmount.toFixed(6)} BTC`);
+            }
+
+            Logger.info(`📈 Thực hiện lệnh MUA: ${finalAmount} ${this.config.symbol} @ ${price}`);
+
+            const order = await this.exchange.createMarketBuyOrder(this.config.symbol, finalAmount);
+            const entryPrice = order.price || price;
+
             // Tính toán Stop Loss theo swing low gần nhất (giả sử 1% dưới entry)
             const stopLoss = entryPrice * 0.99; // Tạm thời dùng 1%, sẽ cập nhật theo swing low thực tế
-            
+
             // Tính toán Take Profit: 0.3% - 0.5%
             const takeProfit = entryPrice * 1.003; // 0.3%
-            
+
             // Kiểm tra Risk/Reward ratio tối thiểu 1:1.5
             const riskDistance = entryPrice - stopLoss;
             const rewardDistance = takeProfit - entryPrice;
             const riskRewardRatio = rewardDistance / riskDistance;
-            
+
             if (riskRewardRatio < 1.5) {
                 Logger.warn(`⚠️ Risk/Reward ratio thấp: ${riskRewardRatio.toFixed(2)} < 1.5`);
                 // Điều chỉnh take profit để đạt R/R 1:1.5
-                const adjustedTakeProfit = entryPrice + (riskDistance * 1.5);
-                Logger.info(`🔧 Điều chỉnh Take Profit: ${takeProfit.toFixed(2)} → ${adjustedTakeProfit.toFixed(2)}`);
+                const adjustedTakeProfit = entryPrice + riskDistance * 1.5;
+                Logger.info(
+                    `🔧 Điều chỉnh Take Profit: ${takeProfit.toFixed(2)} → ${adjustedTakeProfit.toFixed(2)}`
+                );
             }
 
             this.currentPosition = {
                 side: 'BUY',
-                amount: order.amount || amount,
+                amount: order.amount || finalAmount,
                 entryPrice,
                 entryTime: Date.now(),
                 stopLoss,
@@ -493,16 +526,17 @@ class TradingBot {
                 id: order.id || '',
                 symbol: this.config.symbol,
                 side: 'BUY',
-                amount: order.amount || amount,
+                amount: order.amount || finalAmount,
                 price: entryPrice,
                 timestamp: Date.now()
             };
 
             await this.saveTrade(trade);
-            
-            Logger.trade('BUY', this.config.symbol, entryPrice, amount);
-            Logger.info(`🎯 Stop Loss: ${stopLoss.toFixed(2)} | Take Profit: ${takeProfit.toFixed(2)} | R/R: ${riskRewardRatio.toFixed(2)}`);
 
+            Logger.trade('BUY', this.config.symbol, entryPrice, finalAmount);
+            Logger.info(
+                `🎯 Stop Loss: ${stopLoss.toFixed(2)} | Take Profit: ${takeProfit.toFixed(2)} | R/R: ${riskRewardRatio.toFixed(2)}`
+            );
         } catch (error) {
             Logger.error('❌ Lỗi thực hiện lệnh mua:', error as Error);
             throw error;
@@ -518,7 +552,9 @@ class TradingBot {
         }
 
         try {
-            Logger.info(`📉 Thực hiện lệnh BÁN: ${this.currentPosition.amount} ${this.config.symbol} @ ${price}`);
+            Logger.info(
+                `📉 Thực hiện lệnh BÁN: ${this.currentPosition.amount} ${this.config.symbol} @ ${price}`
+            );
 
             const order = await this.exchange.createMarketSellOrder(
                 this.config.symbol,
@@ -526,7 +562,8 @@ class TradingBot {
             );
 
             const profit = (this.currentPosition.entryPrice - price) * this.currentPosition.amount;
-            const profitPercentage = (profit / (this.currentPosition.entryPrice * this.currentPosition.amount)) * 100;
+            const profitPercentage =
+                (profit / (this.currentPosition.entryPrice * this.currentPosition.amount)) * 100;
 
             const trade: Trade = {
                 id: order.id || '',
@@ -553,7 +590,6 @@ class TradingBot {
             this.currentPosition = null;
 
             Logger.trade('SELL', this.config.symbol, price, trade.amount);
-
         } catch (error) {
             Logger.error('❌ Lỗi thực hiện lệnh bán:', error as Error);
             throw error;
@@ -631,7 +667,7 @@ class TradingBot {
     private async saveAIPrediction(prediction: AIPrediction): Promise<void> {
         try {
             const predictionsFile = path.join(this.dataPath, 'ai_predictions.json');
-            let predictions: (AIPrediction & { timestamp: number; })[] = [];
+            let predictions: (AIPrediction & { timestamp: number })[] = [];
 
             try {
                 const data = await fs.readFile(predictionsFile, 'utf8');
@@ -707,11 +743,13 @@ class TradingBot {
             this.stats.totalProfit += trade.profit;
         }
 
-        this.stats.winRate = this.stats.totalTrades > 0 ?
-            (this.stats.winTrades / this.stats.totalTrades) * 100 : 0;
+        this.stats.winRate =
+            this.stats.totalTrades > 0 ? (this.stats.winTrades / this.stats.totalTrades) * 100 : 0;
 
-        this.stats.roi = this.stats.startBalance > 0 ?
-            (this.stats.totalProfit / this.stats.startBalance) * 100 : 0;
+        this.stats.roi =
+            this.stats.startBalance > 0
+                ? (this.stats.totalProfit / this.stats.startBalance) * 100
+                : 0;
     }
 
     /**

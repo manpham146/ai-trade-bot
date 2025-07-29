@@ -1,6 +1,6 @@
 /**
  * 🤖 OpenAI Provider
- * 
+ *
  * Provider cho OpenAI GPT models
  * Implements IAIProvider interface
  */
@@ -42,7 +42,7 @@ class RateLimiter {
     }
 
     getWaitTime(): number {
-        if (this.canMakeRequest()) return 0;
+        if (this.canMakeRequest()) { return 0; }
         const oldestRequest = Math.min(...this.requests);
         return this.timeWindow - (Date.now() - oldestRequest);
     }
@@ -93,7 +93,7 @@ export class OpenAIProvider implements IAIProvider {
 
             Logger.info('✅ OpenAI Provider initialized successfully', {
                 model: this.config.model,
-                initTime: this.initTime + 'ms'
+                initTime: `${this.initTime}ms`
             });
         } catch (error) {
             this.lastError = error instanceof Error ? error.message : 'Unknown error';
@@ -313,7 +313,7 @@ Prioritize capital preservation. Only recommend strong BUY/SELL signals when tec
                 timestamp: Date.now(),
                 provider: 'openai',
                 riskLevel: 'HIGH',
-                note: 'Parsing error: ' + (error instanceof Error ? error.message : 'Unknown error')
+                note: `Parsing error: ${error instanceof Error ? error.message : 'Unknown error'}`
             };
         }
     }

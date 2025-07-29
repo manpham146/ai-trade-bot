@@ -132,7 +132,6 @@ class HealthChecker {
             this.generateReport();
 
             return this.results;
-
         } catch (error) {
             Logger.error('❌ Lỗi kiểm tra sức khỏe:', (error as Error).message);
             this.results.overall = 'CRITICAL';
@@ -178,7 +177,6 @@ class HealthChecker {
                 this.results.errors.push(`Missing environment variables: ${missing.join(', ')}`);
                 Logger.error(`❌ Thiếu biến môi trường: ${missing.join(', ')}`);
             }
-
         } catch (error) {
             this.results.errors.push(`Environment check failed: ${(error as Error).message}`);
             Logger.error('❌ Lỗi kiểm tra môi trường:', (error as Error).message);
@@ -190,7 +188,11 @@ class HealthChecker {
      */
     private async checkAPIConnection(): Promise<void> {
         try {
-            if (!process.env.OKX_API_KEY || !process.env.OKX_SECRET_KEY || !process.env.OKX_PASSPHRASE) {
+            if (
+                !process.env.OKX_API_KEY ||
+                !process.env.OKX_SECRET_KEY ||
+                !process.env.OKX_PASSPHRASE
+            ) {
                 this.results.errors.push('API credentials not configured');
                 return;
             }
@@ -225,7 +227,6 @@ class HealthChecker {
             if (responseTime > 2000) {
                 this.results.warnings.push('API response time is slow (>2s)');
             }
-
         } catch (error) {
             this.results.errors.push(`API connection failed: ${(error as Error).message}`);
             Logger.error('❌ Lỗi kết nối API:', (error as Error).message);
@@ -259,10 +260,11 @@ class HealthChecker {
                 this.checks.aiModel = true;
                 Logger.info('✅ External AI: OK');
             } else {
-                this.results.warnings.push('No External AI providers configured. Please set API keys.');
+                this.results.warnings.push(
+                    'No External AI providers configured. Please set API keys.'
+                );
                 Logger.warn('⚠️ Chưa cấu hình External AI. Vui lòng thiết lập API keys.');
             }
-
         } catch (error) {
             this.results.errors.push(`External AI check failed: ${(error as Error).message}`);
             Logger.error('❌ Lỗi kiểm tra External AI:', (error as Error).message);
@@ -295,7 +297,6 @@ class HealthChecker {
                 this.results.warnings.push('Low disk space (<10% free)');
                 Logger.warn('⚠️ Dung lượng đĩa thấp');
             }
-
         } catch (error) {
             this.results.warnings.push(`Disk space check failed: ${(error as Error).message}`);
             Logger.warn('⚠️ Không thể kiểm tra dung lượng đĩa:', (error as Error).message);
@@ -327,12 +328,15 @@ class HealthChecker {
 
             if (systemUsagePercent < 90 && heapUsedMB < 500) {
                 this.checks.memory = true;
-                Logger.info(`✅ Bộ nhớ: OK (Heap: ${heapUsedMB}MB, System: ${systemUsagePercent}%)`);
+                Logger.info(
+                    `✅ Bộ nhớ: OK (Heap: ${heapUsedMB}MB, System: ${systemUsagePercent}%)`
+                );
             } else {
                 this.results.warnings.push('High memory usage detected');
-                Logger.warn(`⚠️ Sử dụng bộ nhớ cao (Heap: ${heapUsedMB}MB, System: ${systemUsagePercent}%)`);
+                Logger.warn(
+                    `⚠️ Sử dụng bộ nhớ cao (Heap: ${heapUsedMB}MB, System: ${systemUsagePercent}%)`
+                );
             }
-
         } catch (error) {
             this.results.warnings.push(`Memory check failed: ${(error as Error).message}`);
             Logger.warn('⚠️ Không thể kiểm tra bộ nhớ:', (error as Error).message);
@@ -364,12 +368,15 @@ class HealthChecker {
 
             if (missingCritical.length === 0) {
                 this.checks.dependencies = true;
-                Logger.info(`✅ Dependencies: OK (${dependencies.length} production, ${devDepsCount} dev)`);
+                Logger.info(
+                    `✅ Dependencies: OK (${dependencies.length} production, ${devDepsCount} dev)`
+                );
             } else {
-                this.results.errors.push(`Missing critical dependencies: ${missingCritical.join(', ')}`);
+                this.results.errors.push(
+                    `Missing critical dependencies: ${missingCritical.join(', ')}`
+                );
                 Logger.error(`❌ Thiếu dependencies quan trọng: ${missingCritical.join(', ')}`);
             }
-
         } catch (error) {
             this.results.errors.push(`Dependencies check failed: ${(error as Error).message}`);
             Logger.error('❌ Lỗi kiểm tra dependencies:', (error as Error).message);
@@ -417,15 +424,17 @@ class HealthChecker {
 
         // Status icon
         const statusIcon: Record<string, string> = {
-            'HEALTHY': '🟢',
-            'FAIR': '🟡',
-            'WARNING': '🟠',
-            'CRITICAL': '🔴',
-            'UNKNOWN': '⚪'
+            HEALTHY: '🟢',
+            FAIR: '🟡',
+            WARNING: '🟠',
+            CRITICAL: '🔴',
+            UNKNOWN: '⚪'
         };
 
         console.log(`${statusIcon[overall]} Tình trạng tổng thể: ${overall}`);
-        console.log(`📊 Kiểm tra: ${summary.passedChecks}/${summary.totalChecks} thành công (${summary.passRate}%)`);
+        console.log(
+            `📊 Kiểm tra: ${summary.passedChecks}/${summary.totalChecks} thành công (${summary.passRate}%)`
+        );
         console.log(`⚠️ Cảnh báo: ${summary.warningsCount}`);
         console.log(`❌ Lỗi: ${summary.errorsCount}`);
         console.log('');
@@ -486,8 +495,9 @@ class HealthChecker {
 // Chạy health check nếu file được gọi trực tiếp
 if (require.main === module) {
     const healthChecker = new HealthChecker();
-    healthChecker.runAllChecks()
-        .then(async (results) => {
+    healthChecker
+        .runAllChecks()
+        .then(async results => {
             await healthChecker.saveReport();
             process.exit(results.overall === 'CRITICAL' ? 1 : 0);
         })

@@ -1,3 +1,6 @@
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import * as ccxt from 'ccxt';
 import { AIManager } from '../ai/AIManager';
 import { AIFactory } from '../ai/AIFactory';
@@ -197,7 +200,9 @@ class BacktestEngine {
     async run(): Promise<BacktestResults> {
         try {
             Logger.info('🔄 Bắt đầu backtest...');
-            Logger.info(`📅 Từ ${this.config.startDate.toDateString()} đến ${this.config.endDate.toDateString()}`);
+            Logger.info(
+                `📅 Từ ${this.config.startDate.toDateString()} đến ${this.config.endDate.toDateString()}`
+            );
 
             // Khởi tạo AI Manager
             const aiFactory = AIFactory.getInstance();
@@ -218,7 +223,6 @@ class BacktestEngine {
 
             Logger.info('✅ Backtest hoàn thành!');
             return this.results;
-
         } catch (error) {
             Logger.error('❌ Lỗi backtest:', (error as Error).message);
             throw error;
@@ -249,7 +253,9 @@ class BacktestEngine {
                 limit
             );
 
-            if (!data || data.length === 0) { break; }
+            if (!data || data.length === 0) {
+                break;
+            }
 
             allData = allData.concat(data as number[][]);
             const lastCandle = data[data.length - 1];
@@ -261,9 +267,10 @@ class BacktestEngine {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
 
-        return allData.filter(candle =>
-            candle[0] >= this.config.startDate.getTime() &&
-            candle[0] <= this.config.endDate.getTime()
+        return allData.filter(
+            candle =>
+                candle[0] >= this.config.startDate.getTime() &&
+                candle[0] <= this.config.endDate.getTime()
         );
     }
 
@@ -273,7 +280,8 @@ class BacktestEngine {
     private async simulate(historicalData: number[][]): Promise<void> {
         Logger.info('🎯 Bắt đầu simulation...');
 
-        for (let i = 60; i < historicalData.length; i++) { // Bắt đầu từ nến thứ 60 để có đủ dữ liệu
+        for (let i = 60; i < historicalData.length; i++) {
+            // Bắt đầu từ nến thứ 60 để có đủ dữ liệu
             const currentCandle = historicalData[i];
             const currentTime = new Date(currentCandle[0]);
             const currentPrice = currentCandle[4]; // Close price
@@ -282,8 +290,10 @@ class BacktestEngine {
             this.updatePortfolioValue(currentPrice);
 
             // Reset daily trades nếu sang ngày mới
-            if (this.portfolio.lastTradeDate &&
-                currentTime.toDateString() !== this.portfolio.lastTradeDate.toDateString()) {
+            if (
+                this.portfolio.lastTradeDate &&
+                currentTime.toDateString() !== this.portfolio.lastTradeDate.toDateString()
+            ) {
                 this.portfolio.dailyTrades = 0;
             }
 
@@ -292,10 +302,10 @@ class BacktestEngine {
 
             // Phân tích kỹ thuật
             const technicalAnalysis = await this.marketAnalyzer.analyze(marketData);
-            
+
             // Bổ sung các thuộc tính còn thiếu cho technicalAnalysis
-             // TechnicalAnalysis từ MarketAnalyzer đã có đầy đủ cấu trúc cần thiết
-              const enhancedTechnicalAnalysis = technicalAnalysis;
+            // TechnicalAnalysis từ MarketAnalyzer đã có đầy đủ cấu trúc cần thiết
+            const enhancedTechnicalAnalysis = technicalAnalysis;
 
             // Dự đoán AI (giả lập)
             const aiPrediction = await this.simulateAIPrediction(marketData);
@@ -305,12 +315,15 @@ class BacktestEngine {
                 marketData,
                 technicalAnalysis: enhancedTechnicalAnalysis,
                 aiPrediction,
-                currentPosition: this.portfolio.btc > 0 ? {
-                     entryPrice: 0, // Simplified for backtest
-                     entryTime: Date.now(),
-                     amount: this.portfolio.btc,
-                     side: 'BUY' as const
-                 } : undefined,
+                currentPosition:
+                    this.portfolio.btc > 0
+                        ? {
+                              entryPrice: 0, // Simplified for backtest
+                              entryTime: Date.now(),
+                              amount: this.portfolio.btc,
+                              side: 'BUY' as const
+                          }
+                        : undefined,
                 dailyTrades: this.portfolio.dailyTrades
             };
             const riskAssessment = await this.riskManager.assess(riskAssessmentData);
@@ -331,7 +344,9 @@ class BacktestEngine {
             // Log tiến độ
             if (i % 1000 === 0) {
                 const progress = ((i / historicalData.length) * 100).toFixed(1);
-                Logger.info(`📈 Tiến độ: ${progress}% - Portfolio: $${this.portfolio.totalValue.toFixed(2)}`);
+                Logger.info(
+                    `📈 Tiến độ: ${progress}% - Portfolio: $${this.portfolio.totalValue.toFixed(2)}`
+                );
             }
         }
     }
@@ -451,8 +466,14 @@ class BacktestEngine {
     /**
      * Thực hiện giao dịch trong backtest
      */
-    private async executeTrade(decision: TradingDecision, timestamp: Date, price: number): Promise<void> {
-        if (!decision.amount) return;
+    private async executeTrade(
+        decision: TradingDecision,
+        timestamp: Date,
+        price: number
+    ): Promise<void> {
+        if (!decision.amount) {
+            return;
+        }
 
         const trade: Trade = {
             timestamp: timestamp.getTime(),
@@ -466,7 +487,7 @@ class BacktestEngine {
 
         if (decision.action === 'BUY') {
             if (this.portfolio.balance >= trade.cost + trade.fee) {
-                this.portfolio.balance -= (trade.cost + trade.fee);
+                this.portfolio.balance -= trade.cost + trade.fee;
                 this.portfolio.btc += trade.amount;
                 trade.pnl = -(trade.cost + trade.fee);
             } else {
@@ -474,13 +495,16 @@ class BacktestEngine {
             }
         } else if (decision.action === 'SELL') {
             if (this.portfolio.btc >= trade.amount) {
-                this.portfolio.balance += (trade.cost - trade.fee);
+                this.portfolio.balance += trade.cost - trade.fee;
                 this.portfolio.btc -= trade.amount;
 
                 // Tính P&L
-                const buyTrade = this.portfolio.trades.slice().reverse().find(t => t.side === 'buy');
+                const buyTrade = this.portfolio.trades
+                    .slice()
+                    .reverse()
+                    .find(t => t.side === 'buy');
                 if (buyTrade) {
-                    trade.pnl = (trade.cost - trade.fee) - (buyTrade.cost + buyTrade.fee);
+                    trade.pnl = trade.cost - trade.fee - (buyTrade.cost + buyTrade.fee);
                 }
             } else {
                 return; // Không đủ BTC
@@ -503,7 +527,7 @@ class BacktestEngine {
      * Cập nhật giá trị portfolio
      */
     private updatePortfolioValue(currentPrice: number): void {
-        this.portfolio.totalValue = this.portfolio.balance + (this.portfolio.btc * currentPrice);
+        this.portfolio.totalValue = this.portfolio.balance + this.portfolio.btc * currentPrice;
     }
 
     /**
@@ -514,20 +538,22 @@ class BacktestEngine {
         const initialValue = this.config.initialBalance;
 
         this.results.totalProfit = finalValue - initialValue;
-        this.results.winRate = this.results.totalTrades > 0 ?
-            (this.results.winTrades / this.results.totalTrades) * 100 : 0;
+        this.results.winRate =
+            this.results.totalTrades > 0
+                ? (this.results.winTrades / this.results.totalTrades) * 100
+                : 0;
 
         // Tính toán các metrics khác
         const profits = this.portfolio.trades.filter(t => t.pnl > 0).map(t => t.pnl);
         const losses = this.portfolio.trades.filter(t => t.pnl < 0).map(t => Math.abs(t.pnl));
 
-        this.results.avgProfit = profits.length > 0 ?
-            profits.reduce((a, b) => a + b, 0) / profits.length : 0;
-        this.results.avgLoss = losses.length > 0 ?
-            losses.reduce((a, b) => a + b, 0) / losses.length : 0;
+        this.results.avgProfit =
+            profits.length > 0 ? profits.reduce((a, b) => a + b, 0) / profits.length : 0;
+        this.results.avgLoss =
+            losses.length > 0 ? losses.reduce((a, b) => a + b, 0) / losses.length : 0;
 
-        this.results.profitFactor = this.results.avgLoss > 0 ?
-            this.results.avgProfit / this.results.avgLoss : 0;
+        this.results.profitFactor =
+            this.results.avgLoss > 0 ? this.results.avgProfit / this.results.avgLoss : 0;
 
         // ROI
         this.results.roi = ((finalValue - initialValue) / initialValue) * 100;
@@ -553,10 +579,14 @@ class BacktestEngine {
         console.log(`\n${'='.repeat(60)}`);
         console.log('📊 BÁO CÁO BACKTEST');
         console.log('='.repeat(60));
-        console.log(`📅 Thời gian: ${this.config.startDate.toDateString()} - ${this.config.endDate.toDateString()}`);
+        console.log(
+            `📅 Thời gian: ${this.config.startDate.toDateString()} - ${this.config.endDate.toDateString()}`
+        );
         console.log(`💰 Vốn ban đầu: $${this.config.initialBalance}`);
         console.log(`💰 Giá trị cuối: $${this.portfolio.totalValue.toFixed(2)}`);
-        console.log(`📈 Lợi nhuận: $${this.results.totalProfit.toFixed(2)} (${this.results.roi.toFixed(2)}%)`);
+        console.log(
+            `📈 Lợi nhuận: $${this.results.totalProfit.toFixed(2)} (${this.results.roi.toFixed(2)}%)`
+        );
         console.log(`📊 Tổng giao dịch: ${this.results.totalTrades}`);
         console.log(`✅ Giao dịch thắng: ${this.results.winTrades}`);
         console.log(`❌ Giao dịch thua: ${this.results.lossTrades}`);
@@ -571,13 +601,17 @@ class BacktestEngine {
 
     // Helper functions
     private calculateSMA(prices: number[], period: number): number {
-        if (prices.length < period) { return prices[prices.length - 1]; }
+        if (prices.length < period) {
+            return prices[prices.length - 1];
+        }
         const sum = prices.slice(-period).reduce((a, b) => a + b, 0);
         return sum / period;
     }
 
     private calculateRSI(prices: number[], period: number = 14): number {
-        if (prices.length < period + 1) { return 50; }
+        if (prices.length < period + 1) {
+            return 50;
+        }
 
         let gains = 0;
         let losses = 0;
@@ -594,10 +628,12 @@ class BacktestEngine {
         const avgGain = gains / period;
         const avgLoss = losses / period;
 
-        if (avgLoss === 0) { return 100; }
+        if (avgLoss === 0) {
+            return 100;
+        }
 
         const rs = avgGain / avgLoss;
-        return 100 - (100 / (1 + rs));
+        return 100 - 100 / (1 + rs);
     }
 }
 

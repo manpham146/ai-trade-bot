@@ -227,8 +227,8 @@ DATA_RETENTION_DAYS=90
      * Ẩn API key
      */
     private maskApiKey(apiKey: string): string {
-        if (!apiKey || apiKey.length < 8) return '***';
-        return apiKey.substring(0, 4) + '***' + apiKey.substring(apiKey.length - 4);
+        if (!apiKey || apiKey.length < 8) { return '***'; }
+        return `${apiKey.substring(0, 4)}***${apiKey.substring(apiKey.length - 4)}`;
     }
 }
 
