@@ -388,7 +388,7 @@ class MarketAnalyzer {
     }
 
     /**
-     * Kiểm tra điều kiện vào lệnh theo chiến lược mới
+     * Kiểm tra điều kiện vào lệnh theo chiến lược mới (bao gồm sideway)
      */
     private checkEntryCondition(
         currentPrice: number,
@@ -396,11 +396,6 @@ class MarketAnalyzer {
         rsi: number,
         dailyTrend: 'UPTREND' | 'DOWNTREND' | 'SIDEWAYS'
     ): boolean {
-        // Chỉ giao dịch khi có xu hướng rõ ràng trên D1
-        if (dailyTrend === 'SIDEWAYS') {
-            return false;
-        }
-
         // Điều kiện LONG: xu hướng tăng D1 + giá pullback về EMA20 + RSI < 40
         if (dailyTrend === 'UPTREND') {
             const nearEMA20 = Math.abs(currentPrice - ema20) / ema20 <= 0.002; // Trong vòng 0.2% của EMA20
@@ -413,7 +408,95 @@ class MarketAnalyzer {
             return nearEMA20 && rsi > 60;
         }
 
+        // Điều kiện SIDEWAYS: Cho phép giao dịch linh hoạt dựa trên tín hiệu ngắn hạn
+        if (dailyTrend === 'SIDEWAYS') {
+            const nearEMA20 = Math.abs(currentPrice - ema20) / ema20 <= 0.001; // Gần EMA20 hơn (0.1%)
+            
+            // LONG trong sideway: RSI oversold + gần EMA20
+            const longCondition = nearEMA20 && rsi < 35; // RSI thấp hơn cho sideway
+            
+            // SHORT trong sideway: RSI overbought + gần EMA20
+            const shortCondition = nearEMA20 && rsi > 65; // RSI cao hơn cho sideway
+            
+            return longCondition || shortCondition;
+        }
+
         return false;
+    }
+
+    /**
+     * Tạo tín hiệu giao dịch cho thị trường sideway
+     */
+    private generateSidewaySignals(data: SignalData, reasoning: string[]): {
+        signal: 'BUY' | 'SELL' | 'HOLD';
+        confidence: number;
+        reasoning: string[];
+    } {
+        let signal: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
+        let confidence = 0;
+
+        // Kiểm tra điều kiện gần EMA20
+        const nearEMA20 = Math.abs(data.currentPrice - data.ema20) / data.ema20 <= 0.001;
+        reasoning.push(`Khoảng cách đến EMA20: ${((Math.abs(data.currentPrice - data.ema20) / data.ema20) * 100).toFixed(3)}%`);
+
+        // Phân tích RSI cho sideway
+        if (data.rsi < 35 && nearEMA20) {
+            // Tín hiệu LONG trong sideway
+            signal = 'BUY';
+            confidence = 0.6; // Confidence thấp hơn cho sideway
+            reasoning.push(`🎯 LONG Sideway: RSI oversold (${data.rsi.toFixed(1)}) + gần EMA20`);
+            
+            // Tăng confidence nếu có volume cao
+            if (data.volumeAnalysis.strength === 'HIGH') {
+                confidence += 0.1;
+                reasoning.push('📊 Volume cao xác nhận tín hiệu');
+            }
+            
+            // Kiểm tra MACD hỗ trợ
+            if (data.macd.macd > data.macd.signal) {
+                confidence += 0.1;
+                reasoning.push('📈 MACD hỗ trợ tín hiệu tăng');
+            }
+            
+        } else if (data.rsi > 65 && nearEMA20) {
+            // Tín hiệu SHORT trong sideway
+            signal = 'SELL';
+            confidence = 0.6; // Confidence thấp hơn cho sideway
+            reasoning.push(`🎯 SHORT Sideway: RSI overbought (${data.rsi.toFixed(1)}) + gần EMA20`);
+            
+            // Tăng confidence nếu có volume cao
+            if (data.volumeAnalysis.strength === 'HIGH') {
+                confidence += 0.1;
+                reasoning.push('📊 Volume cao xác nhận tín hiệu');
+            }
+            
+            // Kiểm tra MACD hỗ trợ
+            if (data.macd.macd < data.macd.signal) {
+                confidence += 0.1;
+                reasoning.push('📉 MACD hỗ trợ tín hiệu giảm');
+            }
+            
+        } else {
+            // Chưa đủ điều kiện
+            reasoning.push(`⏳ Chờ tín hiệu sideway: RSI cần < 35 hoặc > 65 (hiện tại: ${data.rsi.toFixed(1)})`);
+            if (!nearEMA20) {
+                reasoning.push('⏳ Chờ giá về gần EMA20 để vào lệnh');
+            }
+        }
+
+        // Kiểm tra Bollinger Bands để tránh vùng cực đoan
+        if (signal === 'BUY' && data.currentPrice <= data.bollinger.lower) {
+            reasoning.push('⚠️ Giá ở Bollinger Lower - Tăng confidence');
+            confidence += 0.1;
+        } else if (signal === 'SELL' && data.currentPrice >= data.bollinger.upper) {
+            reasoning.push('⚠️ Giá ở Bollinger Upper - Tăng confidence');
+            confidence += 0.1;
+        }
+
+        // Giới hạn confidence tối đa cho sideway
+        confidence = Math.min(confidence, 0.8);
+
+        return { signal, confidence, reasoning };
     }
 
     /**
@@ -500,12 +583,13 @@ class MarketAnalyzer {
         let signal: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
         let confidence = 0;
 
-        // Bước 1: Kiểm tra xu hướng D1 - Điều kiện bắt buộc
+        // Bước 1: Kiểm tra xu hướng D1
         reasoning.push(`Xu hướng D1: ${data.dailyTrend}`);
 
+        // Xử lý đặc biệt cho thị trường sideway
         if (data.dailyTrend === 'SIDEWAYS') {
-            reasoning.push('❌ Không giao dịch trong thị trường sideway');
-            return { signal: 'HOLD', confidence: 0, reasoning };
+            reasoning.push('📊 Thị trường sideway - Áp dụng chiến lược scalping');
+            return this.generateSidewaySignals(data, reasoning);
         }
 
         // Bước 2: Tính điểm số từ các chỉ báo

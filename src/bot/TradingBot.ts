@@ -88,6 +88,7 @@ interface RiskAssessment {
     stopLoss: number;
     takeProfit: number;
     error?: string;
+    detailedFactors?: string[]; // Thêm thông tin chi tiết
 }
 
 interface TradingDecision {
@@ -244,6 +245,7 @@ class TradingBot {
 
             // 2. Phân tích kỹ thuật
             const technicalAnalysis = await this.marketAnalyzer.analyze(marketData);
+            Logger.info(`💭 Thông tin KĨ THUẬT: ${JSON.stringify(technicalAnalysis)}`);
             this.lastTechnicalAnalysis = technicalAnalysis;
 
             // 3. Dự đoán AI (kiểm tra cấu hình AI_ADVISOR_ENABLED)
@@ -267,6 +269,8 @@ class TradingBot {
                 aiPrediction,
                 currentPosition: this.currentPosition || undefined
             });
+            Logger.info(`💭 Thông tin risk: ${JSON.stringify(riskAssessment)}`);
+
 
             // 5. Đưa ra quyết định
             const decision = this.makeDecision({
@@ -275,10 +279,40 @@ class TradingBot {
                 risk: riskAssessment
             });
 
-            Logger.info(
-                `🎯 Quyết định: ${decision.action} (Confidence: ${(decision.confidence * 100).toFixed(1)}%)`
-            );
-            Logger.info(`💭 Lý do: ${decision.reasoning}`);
+            Logger.info(`💭 Thông tin decision: ${JSON.stringify(decision)}`);
+
+
+            Logger.info('═══════════════════════════════════════════════════════════');
+            Logger.info(`🎯 QUYẾT ĐỊNH: ${decision.action} (Confidence: ${(decision.confidence * 100).toFixed(1)}%)`);
+            Logger.info('💭 LÝ DO QUYẾT ĐỊNH:');
+            Logger.info(`   • ${decision.reasoning}`);
+
+            // Show additional context if available
+            if (this.lastTechnicalAnalysis) {
+                Logger.info(`   • RSI: ${this.lastTechnicalAnalysis.rsi.toFixed(2)}`);
+                Logger.info(`   • MACD: ${this.lastTechnicalAnalysis.macd.histogram.toFixed(4)}`);
+                Logger.info(`   • BB Width: ${(
+                    (this.lastTechnicalAnalysis.bollinger.upper - this.lastTechnicalAnalysis.bollinger.lower) /
+                    this.lastTechnicalAnalysis.bollinger.middle * 100
+                ).toFixed(2)}%`);
+            }
+
+            // Hiển thị thông tin chi tiết về rủi ro nếu có
+            if (riskAssessment.detailedFactors && riskAssessment.detailedFactors.length > 0) {
+                Logger.info('📋 THÔNG TIN BỔ SUNG:');
+                riskAssessment.detailedFactors.forEach(factor => {
+                    Logger.info(`   ${factor}`);
+                });
+            }
+
+            // Hiển thị khuyến nghị
+            if (riskAssessment.recommendations && riskAssessment.recommendations.length > 0) {
+                Logger.info('💡 KHUYẾN NGHỊ:');
+                riskAssessment.recommendations.forEach(rec => {
+                    Logger.info(`   ${rec}`);
+                });
+            }
+            Logger.info('═══════════════════════════════════════════════════════════');
 
             // 6. Thực hiện giao dịch (nếu được bật)
             if (this.tradingEnabled && decision.action !== 'HOLD') {
@@ -302,8 +336,12 @@ class TradingBot {
             throw new Error('Exchange not initialized');
         }
 
+        // Lấy khung thời gian từ biến môi trường, mặc định là '1h'
+        const timeframe = process.env.MARKET_TIMEFRAME || '1h';
+        Logger.info(`📊 Lấy dữ liệu thị trường với khung thời gian: ${timeframe}`);
+
         const ticker = await this.exchange.fetchTicker(this.config.symbol);
-        const ohlcv = await this.exchange.fetchOHLCV(this.config.symbol, '1h', undefined, 100);
+        const ohlcv = await this.exchange.fetchOHLCV(this.config.symbol, timeframe, undefined, 100);
 
         return {
             symbol: this.config.symbol,
@@ -350,13 +388,16 @@ class TradingBot {
             };
         }
 
-        // Chỉ giao dịch khi có xu hướng rõ ràng (không sideways)
+        // Kiểm tra thị trường sideway - chỉ cấm giao dịch nếu rủi ro cao
         if ((technical as any).dailyTrend === 'SIDEWAYS') {
-            return {
-                action: 'HOLD',
-                confidence: 0,
-                reasoning: '📊 Thị trường sideway - Chờ xu hướng rõ ràng'
-            };
+            if (risk.level !== 'LOW' && risk.level !== 'MEDIUM') {
+                return {
+                    action: 'HOLD',
+                    confidence: 0,
+                    reasoning: '📊 Thị trường sideway + Rủi ro cao - Chờ xu hướng rõ ràng'
+                };
+            }
+            // Nếu thị trường sideway nhưng risk level MEDIUM/LOW, tiếp tục đánh giá điều kiện khác
         }
 
         // Kiểm tra điều kiện vào lệnh
@@ -479,7 +520,7 @@ class TradingBot {
             // Kiểm tra nếu sử dụng toàn bộ tài sản
             const useFullBalance = process.env.USE_FULL_BALANCE === 'true';
             let finalAmount = amount;
-            
+
             if (useFullBalance) {
                 // Tính toán amount dựa trên toàn bộ số dư
                 const balance = this.stats.currentBalance;
@@ -667,7 +708,7 @@ class TradingBot {
     private async saveAIPrediction(prediction: AIPrediction): Promise<void> {
         try {
             const predictionsFile = path.join(this.dataPath, 'ai_predictions.json');
-            let predictions: (AIPrediction & { timestamp: number })[] = [];
+            let predictions: (AIPrediction & { timestamp: number; })[] = [];
 
             try {
                 const data = await fs.readFile(predictionsFile, 'utf8');

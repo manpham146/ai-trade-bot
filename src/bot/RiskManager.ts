@@ -92,6 +92,7 @@ interface RiskAssessment {
     stopLoss: number;
     takeProfit: number;
     error?: string;
+    detailedFactors?: string[]; // Thêm thông tin chi tiết
 }
 
 class RiskManager {
@@ -101,7 +102,7 @@ class RiskManager {
     private maxTradesPerDay: number;
     private dailyTradeCount: number = 0;
     private lastTradeDate: string | null = null;
-    private tradeHistory: (Trade & { timestamp: number })[] = [];
+    private tradeHistory: (Trade & { timestamp: number; })[] = [];
     private maxHistoryLength: number = 100;
 
     constructor() {
@@ -125,13 +126,13 @@ class RiskManager {
      */
     calculateSafePositionSize(balance: number, entryPrice: number, stopLoss: number): number {
         const useFullBalance = process.env.USE_FULL_BALANCE === 'true';
-        
+
         if (useFullBalance) {
             // Sử dụng toàn bộ tài sản (100%)
             Logger.info(`💰 Sử dụng toàn bộ tài sản: $${balance.toFixed(2)}`);
             return balance; // Trả về toàn bộ số dư
         }
-        
+
         // Logic cũ: Tính toán dựa trên rủi ro
         const maxRiskAmount = balance * 0.005; // 0.5% của tài khoản
         const riskPerUnit = Math.abs(entryPrice - stopLoss);
@@ -158,36 +159,76 @@ class RiskManager {
 
             // Kiểm tra điều kiện cơ bản
             const factors: string[] = [];
+            const detailedFactors: string[] = []; // Thêm mảng chi tiết
             let riskScore = 0;
 
             // 1. Kiểm tra xu hướng thị trường
-            if ((technicalAnalysis as any)?.dailyTrend === 'SIDEWAYS') {
-                riskScore += 0.8;
-                factors.push('Thị trường sideway - Rủi ro cao');
+            const dailyTrend = (technicalAnalysis as any)?.dailyTrend;
+            const entryCondition = (technicalAnalysis as any)?.entryCondition;
+
+            detailedFactors.push('📊 Điểm vào lệnh hiện tại:', entryCondition);
+
+            if (dailyTrend === 'SIDEWAYS') {
+                // Trong sideways, chỉ tăng rủi ro nhẹ nếu có tín hiệu tốt
+                if (entryCondition) {
+                    riskScore += 0.1; // Giảm từ 0.8 xuống 0.1 khi có tín hiệu tốt
+                    factors.push('Thị trường sideway nhưng có tín hiệu');
+                    detailedFactors.push('📊 Xu hướng D1: SIDEWAYS có tín hiệu (+0.1 điểm rủi ro)');
+                } else {
+                    riskScore += 0.4; // Vẫn cho phép giao dịch nhưng rủi ro cao hơn
+                    factors.push('Thị trường sideway - Chờ tín hiệu rõ ràng');
+                    detailedFactors.push('📊 Xu hướng D1: SIDEWAYS chưa có tín hiệu (+0.4 điểm rủi ro)');
+                }
+            } else {
+                const trend = dailyTrend || 'UNKNOWN';
+                detailedFactors.push(`📊 Xu hướng D1: ${trend} (✓ Phù hợp giao dịch)`);
+
+                // 3. Kiểm tra điều kiện vào lệnh
+                if (!entryCondition) {
+                    riskScore += 0.4;
+                    factors.push('Chưa đủ điều kiện vào lệnh');
+                    detailedFactors.push('🎯 Điều kiện vào lệnh: CHƯA ĐỦ (+0.4 điểm rủi ro)');
+                } else {
+                    detailedFactors.push('🎯 Điều kiện vào lệnh: ĐỦ ĐIỀU KIỆN (✓)');
+                }
             }
 
-            // 2. Đánh giá độ tin cậy AI
-            if (aiPrediction.confidence < 0.6) {
-                riskScore += 0.3;
-                factors.push('Độ tin cậy AI thấp');
+            // 2. Đánh giá độ tin cậy AI (chỉ khi AI được bật)
+            const aiAdvisorEnabled = process.env.AI_ADVISOR_ENABLED === 'true';
+            const aiConfidence = aiPrediction.confidence;
+
+            console.log('aiAdvisorEnabled:', aiAdvisorEnabled);
+            if (aiAdvisorEnabled) {
+                if (aiConfidence < 0.7) {
+                    riskScore += 0.3;
+                    factors.push('Độ tin cậy AI thấp');
+                    detailedFactors.push(`🤖 AI Confidence: ${(aiConfidence * 100).toFixed(1)}% (+0.3 điểm rủi ro)`);
+                } else {
+                    detailedFactors.push(`🤖 AI Confidence: ${(aiConfidence * 100).toFixed(1)}% (✓ Đủ tin cậy)`);
+                }
+            } else {
+                // detailedFactors.push('🤖 AI Advisor: TẮT (không ảnh hưởng đánh giá)');
             }
 
-            // 3. Kiểm tra điều kiện vào lệnh
-            if (!(technicalAnalysis as any)?.entryCondition) {
-                riskScore += 0.4;
-                factors.push('Chưa đủ điều kiện vào lệnh');
-            }
+
 
             // 4. Đánh giá volatility
             const volatilityRisk = this.assessVolatilityRisk(marketData);
-            riskScore += volatilityRisk.score * 0.3;
+            const volatilityContribution = volatilityRisk.score * 0.3;
+            riskScore += volatilityContribution;
+            detailedFactors.push(`📈 Volatility: ${volatilityRisk.reason} (+${volatilityContribution.toFixed(2)} điểm)`);
+            if (volatilityRisk.atr) {
+                detailedFactors.push(`   └─ ATR: ${(volatilityRisk.atr * 100).toFixed(2)}%`);
+            }
             if (volatilityRisk.score > 0.6) {
                 factors.push(volatilityRisk.reason);
             }
 
             // 5. Kiểm tra tần suất giao dịch
             const frequencyRisk = this.assessTradingFrequencyRisk();
-            riskScore += frequencyRisk.score * 0.2;
+            const frequencyContribution = frequencyRisk.score * 0.2;
+            riskScore += frequencyContribution;
+            detailedFactors.push(`🔄 Tần suất GD: ${frequencyRisk.dailyCount}/${frequencyRisk.maxDaily} (+${frequencyContribution.toFixed(2)} điểm)`);
             if (frequencyRisk.score > 0.5) {
                 factors.push(frequencyRisk.reason);
             }
@@ -198,6 +239,11 @@ class RiskManager {
             const level = this.getRiskLevel(riskScore);
             const recommendations = this.getNewStrategyRecommendations(riskScore, factors);
 
+            // Log chi tiết về đánh giá rủi ro
+            Logger.info('🔍 CHI TIẾT ĐÁNH GIÁ RỦI RO:');
+            detailedFactors.forEach(factor => Logger.info(`   ${factor}`));
+            Logger.info(`📊 Tổng điểm rủi ro: ${riskScore.toFixed(3)} → Mức độ: ${level}`);
+
             return {
                 level,
                 score: riskScore,
@@ -205,7 +251,8 @@ class RiskManager {
                 recommendations,
                 positionSizing: this.calculateNewPositionSize(riskScore, marketData),
                 stopLoss: this.calculateSwingBasedStopLoss(marketData),
-                takeProfit: this.calculateConservativeTakeProfit(marketData)
+                takeProfit: this.calculateConservativeTakeProfit(marketData),
+                detailedFactors // Thêm thông tin chi tiết
             };
         } catch (error) {
             Logger.error('❌ Lỗi đánh giá rủi ro:', (error as Error).message);
@@ -229,16 +276,16 @@ class RiskManager {
         const recommendations: string[] = [];
 
         if (riskScore > 0.7) {
-            recommendations.push('🚫 KHÔNG giao dịch - Rủi ro quá cao');
-            recommendations.push('⏳ Chờ điều kiện thị trường tốt hơn');
+            recommendations.push(`🚫 KHÔNG giao dịch - Rủi ro quá cao (${riskScore.toFixed(3)})`);
+            recommendations.push(`⏳ Chờ điều kiện thị trường tốt hơn (Risk: ${(riskScore * 100).toFixed(1)}%)`);
         } else if (riskScore > 0.5) {
-            recommendations.push('⚠️ Giảm position size xuống 50%');
+            recommendations.push(`⚠️ Giảm position size xuống 50% (Risk: ${(riskScore * 100).toFixed(1)}%)`);
             recommendations.push('🎯 Chỉ giao dịch khi có xác nhận AI cao');
         } else if (riskScore > 0.3) {
-            recommendations.push('✅ Có thể giao dịch với position size bình thường');
+            recommendations.push(`✅ Có thể giao dịch với position size bình thường (Risk: ${(riskScore * 100).toFixed(1)}%)`);
             recommendations.push('📊 Theo dõi chặt chẽ các chỉ báo');
         } else {
-            recommendations.push('🚀 Điều kiện tốt cho giao dịch');
+            recommendations.push(`🚀 Điều kiện tốt cho giao dịch (Risk: ${(riskScore * 100).toFixed(1)}%)`);
             recommendations.push('💰 Có thể tăng position size nhẹ');
         }
 
@@ -255,13 +302,13 @@ class RiskManager {
         if (riskScore > 0.7) {
             return 0;
         } // Không giao dịch
-        
+
         if (useFullBalance) {
             // Sử dụng toàn bộ tài sản bất kể risk score (trừ khi rủi ro quá cao)
             Logger.info(`🎯 Sử dụng toàn bộ tài sản - Risk Score: ${riskScore.toFixed(2)}`);
             return 100; // 100% tài sản
         }
-        
+
         // Logic cũ dựa trên risk score
         if (riskScore > 0.5) {
             return baseSize * 0.5;
@@ -410,25 +457,61 @@ class RiskManager {
                 }
             }
 
-            // Đánh giá xu hướng
+            // Đánh giá xu hướng - Cập nhật cho chiến lược sideway mới
             if (technicalAnalysis.trend) {
                 if (technicalAnalysis.trend.direction === 'SIDEWAYS') {
-                    riskFactors.push('Thị trường đi ngang - khó dự đoán');
-                    riskScore += 0.2;
+                    // Kiểm tra xem có tín hiệu giao dịch tốt trong sideway không
+                    const hasGoodSidewaySignal = this.checkSidewaySignalQuality(indicators);
+                    
+                    if (hasGoodSidewaySignal) {
+                        riskFactors.push('Thị trường sideway với tín hiệu scalping');
+                        riskScore += 0.1; // Giảm rủi ro từ 0.2 xuống 0.1
+                    } else {
+                        riskFactors.push('Thị trường sideway - chờ tín hiệu rõ ràng');
+                        riskScore += 0.2;
+                    }
                 }
             }
 
             return {
-                score: Math.min(riskScore, 1),
-                factors: riskFactors,
-                reason:
-                    riskFactors.length > 0 ? riskFactors.join(', ') : 'Tín hiệu kỹ thuật ổn định'
-            };
-        } catch (error) {
-            Logger.error('❌ Lỗi đánh giá technical risk:', (error as Error).message);
-            return { score: 0.5, reason: 'Lỗi phân tích kỹ thuật' };
+            score: Math.min(riskScore, 1),
+            factors: riskFactors,
+            reason:
+                riskFactors.length > 0 ? riskFactors.join(', ') : 'Tín hiệu kỹ thuật ổn định'
+        };
+    } catch (error) {
+        Logger.error('❌ Lỗi đánh giá technical risk:', (error as Error).message);
+        return { score: 0.5, reason: 'Lỗi phân tích kỹ thuật' };
+    }
+}
+
+/**
+ * Kiểm tra chất lượng tín hiệu giao dịch trong thị trường sideway
+ */
+private checkSidewaySignalQuality(indicators: any): boolean {
+    if (!indicators) return false;
+    
+    // Kiểm tra RSI ở vùng oversold/overbought phù hợp cho scalping
+    if (indicators.rsi) {
+        const rsi = indicators.rsi;
+        // Tín hiệu tốt khi RSI < 35 (oversold) hoặc RSI > 65 (overbought)
+        if (rsi < 35 || rsi > 65) {
+            return true;
         }
     }
+    
+    // Kiểm tra Bollinger Bands - tín hiệu tốt khi giá ở vùng cực đoan
+    if (indicators.bollinger) {
+        const { upper, lower } = indicators.bollinger;
+        const currentPrice = indicators.currentPrice || 0;
+        
+        if (currentPrice <= lower || currentPrice >= upper) {
+            return true;
+        }
+    }
+    
+    return false;
+}
 
     /**
      * Đánh giá rủi ro từ độ tin cậy AI
@@ -650,13 +733,13 @@ class RiskManager {
     private calculatePositionSize(riskScore: number, _marketData: MarketData): number {
         const useFullBalance = process.env.USE_FULL_BALANCE === 'true';
         const baseAmount = parseFloat(process.env.TRADE_AMOUNT || '10');
-        
+
         if (useFullBalance) {
             // Sử dụng toàn bộ tài sản (100%)
             Logger.info(`💰 Position Size: 100% tài sản - Risk Score: ${riskScore.toFixed(2)}`);
             return 100; // 100% tài sản
         }
-        
+
         // Logic cũ dựa trên risk score
         let multiplier = 1;
 

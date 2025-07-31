@@ -151,6 +151,9 @@ OKX_SANDBOX=true  # false for live trading
 TRADING_PAIR=BTC-USDT
 RISK_PERCENTAGE=1
 TARGET_PROFIT=1
+
+# Market Analysis Configuration
+MARKET_TIMEFRAME=1h  # Khung thời gian: 1m, 5m, 15m, 1h, 4h, 1d
 ```
 
 ## 📊 Performance Metrics
